@@ -1,0 +1,3 @@
+- url: postgresql://<ip>/<database name>
+  username: <username>
+  password: <password>
