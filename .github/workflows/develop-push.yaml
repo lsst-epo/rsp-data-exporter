@@ -1,0 +1,54 @@
+# Builds, pushes, and deploys the Rubin Obs API container
+name: 'Build and deploy Rubin Obs API to Google Cloud Run in Dev'
+
+on:
+  push:
+    branches:
+      - 'develop'
+  
+jobs:
+  build-push-deploy:
+    name: 'Build, Publish, and Deploy'
+    runs-on: ubuntu-latest
+
+    # Checkout the repository to the GitHub Actions runner
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    # gcloud CLI setup
+    - name: Login to GCP
+      uses: google-github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.DEV_SA_KEY }}
+        project_id: skyviewer
+        export_default_credentials: true
+
+     # Configure Docker to use the gcloud command-line tool as a credential
+      # helper for authentication
+    - run: gcloud --quiet auth configure-docker
+
+    # Build the Docker image
+    - name: Build Docker image
+      run: |-
+        docker build . \
+          --tag "gcr.io/skyviewer/rsp-data-exporter:${{ github.sha }}"
+    # Push the Docker image to Google Container Registry
+    - name: Publish image to GCR
+      run: |-
+        docker push "gcr.io/skyviewer/rsp-data-exporter:${{ github.sha }}"
+    # Deploy to Cloud Run.
+    - name: Deploy to Cloud Run
+      id: deploy
+      uses: google-github-actions/deploy-cloudrun@main
+      with:
+        service: rsp-data-exporter
+        image: gcr.io/skyviewer/rsp-data-exporter:${{ github.sha }}    
+        credentials: ${{ secrets.DEV_SA_KEY }}
+        region: us-central1
+
+    # Ensure that traffic is directed to the latest revision. This is necessary because
+    # the deploy-cloudrun action above is not capable of both deploying and redirecting
+    # traffic in the same operation
+    - name: Redirect traffic to the latest revision
+      run: gcloud run services update-traffic rsp-data-exporter --platform managed --region us-central1 --to-revisions LATEST=100
