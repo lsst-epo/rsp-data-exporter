@@ -37,14 +37,14 @@ def download_rsp_data_and_upload():
     blob.upload_from_filename(str(filepath[0]))
 
     with open('/tmp/manifest.csv', 'w', newline='') as csvfile:
-        fieldnames = ['email', 'sourceId', 'uri', 'externalId']
+        # fieldnames = ['email', 'sourceId', 'location:1', 'externalId']
+        fieldnames = ['email', 'location:1', 'externalId']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
         writer.writeheader()
         writer.writerow({'email': email, 'sourceId': sourceId, 'uri': blob.public_url, 'externalId': 12312312})
+        # writer.writerow({'email': email, 'location:1': 'https://storage.googleapis.com/butler-config/astrocat.jpeg', 'externalId': 12312312})
         
-        # csvRes = csvfile
-
     manifestBlob = bucket.blob("manifest.csv")
 
     manifestUrl = manifestBlob.upload_from_filename("/tmp/manifest.csv")
