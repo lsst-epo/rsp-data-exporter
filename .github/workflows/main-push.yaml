@@ -44,9 +44,8 @@ jobs:
       with:
         service: rsp-data-exporter-int
         image: gcr.io/edc-int-6c5e/rsp-data-exporter:${{ github.sha }}    
-        credentials: ${{ secrets.DEV_SA_KEY }}
+        credentials: ${{ secrets.SKYVIEWER_INT_SERVICE_ACCOUNT }}
         region: us-central1
-        project: edc-int-6c5e
     # Ensure that traffic is directed to the latest revision. This is necessary because
     # the deploy-cloudrun action above is not capable of both deploying and redirecting
     # traffic in the same operation
