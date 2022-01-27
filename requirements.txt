@@ -2,4 +2,8 @@
 Flask >= 1.0
 gunicorn==20.1.0
 google-cloud-storage==1.43.0
+panoptes-client==1.4.0
+pg8000==1.23.0
+SQLAlchemy==1.4.27
+psycopg2-binary
 #git+https://github.com/lsst/daf_butler@master#egg=daf_butler

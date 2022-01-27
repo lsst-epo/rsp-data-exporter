@@ -1,10 +1,10 @@
 # Builds, pushes, and deploys the RSP Data Exporter container
-name: 'Build and deploy RSP Data Exporter to Google Cloud Run in Integration'
+name: 'Build and deploy RSP Data Exporter to Google Cloud Run in Dev'
 
 on:
   push:
     branches:
-      - 'main'
+      - 'develop'
   
 jobs:
   build-push-deploy:
@@ -20,8 +20,8 @@ jobs:
     - name: Login to GCP
       uses: google-github-actions/setup-gcloud@master
       with:
-        service_account_key: ${{ secrets.SKYVIEWER_INT_SERVICE_ACCOUNT }}
-        project_id: edc-int-6c5e
+        service_account_key: ${{ secrets.DEV_SA_KEY }}
+        project_id: skyviewer
         export_default_credentials: true
 
      # Configure Docker to use the gcloud command-line tool as a credential
@@ -32,21 +32,21 @@ jobs:
     - name: Build Docker image
       run: |-
         docker build . \
-          --tag "gcr.io/edc-int-6c5e/rsp-data-exporter:${{ github.sha }}"
+          --tag "gcr.io/skyviewer/rsp-data-exporter:${{ github.sha }}"
     # Push the Docker image to Google Container Registry
     - name: Publish image to GCR
       run: |-
-        docker push "gcr.io/edc-int-6c5e/rsp-data-exporter:${{ github.sha }}"
+        docker push "gcr.io/skyviewer/rsp-data-exporter:${{ github.sha }}"
     # Deploy to Cloud Run.
     - name: Deploy to Cloud Run
       id: deploy
       uses: google-github-actions/deploy-cloudrun@main
       with:
         service: rsp-data-exporter
-        image: gcr.io/edc-int-6c5e/rsp-data-exporter:${{ github.sha }}    
+        image: gcr.io/skyviewer/rsp-data-exporter:${{ github.sha }}    
         credentials: ${{ secrets.DEV_SA_KEY }}
         region: us-central1
-        project: edc-int-6c5e
+
     # Ensure that traffic is directed to the latest revision. This is necessary because
     # the deploy-cloudrun action above is not capable of both deploying and redirecting
     # traffic in the same operation
