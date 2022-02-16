@@ -18,9 +18,8 @@ DB_HOST = os.environ['DB_HOST']
 DB_PORT = os.environ['DB_PORT']
 db = None
 
-
 @app.route("/citizen-science-ingest")
-def download_rsp_data_and_upload():
+def downloadRspDataAndUpload():
     global db
     db = init_connection_engine()
     email = request.args.get('email')
@@ -57,26 +56,85 @@ def download_rsp_data_and_upload():
 
     # Beginning of database CRUD operations
     newOwner = False
-    ownerId = lookup_owner_record(email)
-    # if(ownerId == None):
+    ownerId = lookupOwnerRecord(email)
+
+    # First lookup owner
     if (isinstance(ownerId, int)):
         print("Found owner record!")
     else:
         newOwner = True
-        ownerId = create_new_owner_record(email)
+        ownerId = createNewOwnerRecord(email)
 
+    # Then, lookup project
     if(newOwner == True):
-        projectId = lookup_project_record(vendorProjectId)
+        projectId = lookupProjectRecord(vendorProjectId)
     else:
-        projectId = create_new_project_record(ownerId, vendorProjectId)
+        projectId = createNewProjectRecord(ownerId, vendorProjectId)
 
-    insertMetaRecord(blob.public_url, sourceId, 'sourceId', projectId)
+    # Then, lookup batch info
+    batchId = checkBatchStatus(projectId)
 
-    db.dispose()
+    if(batchId < 0):
+        # Do not allow for the creation of an existing batch if there are 
+        return Response(
+            status=500,
+            response="You cannot send a new batch of data to your citizen science project because you already have an active, uncompleted batch of data in-progress."
+        )
+    else:
+        # Create new batch record
+        batchId = createNewBatch(projectId)
 
-    return manifestBlob.public_url
+        if(batchId > 0):
+            # Finally, insert meta records
+            insertMetaRecord(blob.public_url, sourceId, 'sourceId', projectId)
+            db.dispose()
+            return manifestBlob.public_url
+        else:
+            db.dispose()
+            return Response(
+            status=500,
+                response="You cannot send a new batch of data to your citizen science project because you already have an active, uncompleted batch of data in-progress."
+            )
+        
+def createNewBatch(projectId):
+    print("rosas - inside createNewBatch")
+    global db
+    stmt = sqlalchemy.text(
+        "INSERT INTO citizen_science_batches (cit_sci_proj_id, batch_status)"
+        "VALUES (:projectId, 'ACTIVE')"
+    )
+    try:
+        batchId = -1;
+        with db.connect() as conn:
+            for row in conn.execute(stmt, projectId=projectId):
+                batchId = row['cit_sci_batch_id']
+            conn.close()
+    except Exception as e:
+        print(e)
+        return Response(
+            status=500,
+            response="An error occurred while creating a citizen_sciences_batches record."
+        )
+    return batchId
 
-def create_new_project_record(ownerId, vendorProjectId):
+def checkBatchStatus(projectId):
+    global db
+    stmt = sqlalchemy.text(
+        "SELECT * FROM citizen_science_batches WHERE cit_sci_proj_id = :projectId AND batch_status = 'ACTIVE'"
+    )
+    try:
+        batchId = -1
+        with db.connect() as conn:
+            records = conn.execute(stmt, projectId=projectId)
+            if(records.rowcount > 0):
+                batchId = records.first()['cit_sci_batch_id']
+            conn.close()
+    except Exception as e:
+        print(e)
+
+    return batchId
+
+def createNewProjectRecord(ownerId, vendorProjectId):
     global db
     stmt = sqlalchemy.text(
         "INSERT INTO citizen_science_projects (vendor_project_id, owner_id, project_status)"
@@ -104,7 +162,7 @@ def create_new_project_record(ownerId, vendorProjectId):
     # return projectId['cit_sci_proj_id']
     return projectId
 
-def lookup_project_record(vendorProjectId):
+def lookupProjectRecord(vendorProjectId):
     global db
     stmt = sqlalchemy.text(
         "SELECT cit_sci_proj_id FROM citizen_science_projects WHERE vendor_project_id = :vendorProjectId"
@@ -130,7 +188,7 @@ def lookup_project_record(vendorProjectId):
         )
     return projectId
 
-def create_new_owner_record(email):
+def createNewOwnerRecord(email):
     global db
     stmt = sqlalchemy.text(
         "INSERT INTO citizen_science_owners (email, status)"
@@ -159,7 +217,7 @@ def create_new_owner_record(email):
     # return ownerId['cit_sci_owner_id']
     return ownerId
 
-def lookup_owner_record(emailP):
+def lookupOwnerRecord(emailP):
     print("inside the lookup_owner_record() function")
     print(emailP)
     global db
