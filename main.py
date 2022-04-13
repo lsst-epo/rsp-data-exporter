@@ -54,18 +54,18 @@ def download_bucket_data_and_process():
 
         cutouts_count = 0
         for cutout in cutouts:
-            if cutouts_count == 10000: # cutout max limit
+            if cutouts_count == 9999: # cutout max limit
                 break
-            destination_filename = cutout.replace("/tmp/", "")
+            destination_filename = cutout.replace("/tmp/" + guid + "/", "")
             blob = bucket.blob(destination_filename)
             blob.upload_from_filename(cutout)
             urls.append(blob.public_url)
             # Insert meta records
             logger.log_text("about to insert meta records")
             insertMetaRecord(blob.public_url, str(round(time.time() * 1000)) , 'sourceId', vendor_project_id)
-            cutouts = cutouts + 1
+            cutouts_count += 1
 
-        manifest_url = build_and_upload_manifest(urls, email, "556677", CLOUD_STORAGE_BUCKET_HIPS2FITS, guid + "/")
+        manifest_url = build_and_upload_manifest(urls, email, "556677", CLOUD_STORAGE_BUCKET_HIPS2FITS)
 
         return manifest_url
 
@@ -106,12 +106,14 @@ def build_and_upload_manifest(urls, email, sourceId, bucket, destination_root = 
     # loop over urls
 
     with open('/tmp/manifest.csv', 'w', newline='') as csvfile:
-        fieldnames = ['email', 'location:1', 'externalId']
+        fieldnames = ['email', 'location:1', 'external_id']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
         writer.writeheader()
+        offset = 1
         for url in urls:
-            writer.writerow({'email': email, 'location:1': url, 'externalId': sourceId})
+            writer.writerow({'email': email, 'location:1': url, 'external_id': str(round(time.time() * 1000) + offset) })
+            offset += 1
     
         
     manifestBlob = bucket.blob(destination_root + "manifest.csv")
@@ -334,6 +336,7 @@ def lookupOwnerRecord(emailP):
     stmt = sqlalchemy.text(
         "SELECT cit_sci_owner_id FROM citizen_science_owners WHERE email=:email"
     )
+    ownerId = ""
 
     try:
         # Using a with statement ensures that the connection is always released
