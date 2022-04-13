@@ -6,4 +6,5 @@ panoptes-client==1.4.0
 pg8000==1.23.0
 SQLAlchemy==1.4.27
 psycopg2-binary
+google-cloud-logging
 #git+https://github.com/lsst/daf_butler@master#egg=daf_butler
