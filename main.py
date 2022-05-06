@@ -2,6 +2,8 @@ import os, fnmatch, json
 import glob # for debugging
 import subprocess
 import csv
+from citizen_science_validator import CitizenScienceValidator
+from data_exporter_response import DataExporterResponse
 from flask import Flask, request, Response
 from google.cloud import storage
 import panoptes_client
@@ -28,20 +30,25 @@ db = None
 
 # Instantiates the logging client
 logging_client = logging.Client()
-log_name = "rosas"
+log_name = "rsp-data-exporter"
 logger = logging_client.logger(log_name)
+response = DataExporterResponse()
+validator = CitizenScienceValidator()
 
 @app.route("/citizen-science-bucket-ingest")
 def download_bucket_data_and_process():
+    global response
+    global validator
     guid = request.args.get("guid")
     email = request.args.get("email")
     vendor_project_id = request.args.get("vendor_project_id")
     vendor_batch_id = request.args.get("vendor_batch_id")
+    response = DataExporterResponse()
+    validator = CitizenScienceValidator()
+    
+    validate_project_metadata(email, vendor_project_id, vendor_batch_id)
 
-    # has_active_batch = check_subject_set_status(vendor_project_id)
-    valid_project_metadata = validate_project_metadata(email, vendor_project_id, vendor_batch_id)
-
-    if valid_project_metadata is True:
+    if validator.error is False:
         cutouts = download_zip(CLOUD_STORAGE_BUCKET_HIPS2FITS, guid + ".zip", guid)
 
         # Get the bucket that the file will be uploaded to.
@@ -65,20 +72,18 @@ def download_bucket_data_and_process():
 
         manifest_url = build_and_upload_manifest(urls, email, "556677", CLOUD_STORAGE_BUCKET_HIPS2FITS, guid + "/")
 
-        return json.dumps({
-            "status": "success",
-            "manifest_url": manifest_url
-        })
-        
-        manifest_url
+        response.status = "success"
+        response.manifest_url = manifest_url
     else:
-        return json.dumps({
-            "status": "error",
-            "message": "some error occurred"
-        })
+        response.status = "error"
+        if response.messages == None or len(response.messages) == 0:
+            response.messages.append("An error occurred while processing the data batch, please try again later.")
+
+    return json.dumps(response)
 
 # Accepts the bucket name and filename to download and returns the path of the downloaded file
 def download_zip(bucket_name, filename, file = None):
+    global response
     # Create a Cloud Storage client.
     gcs = storage.Client()
 
@@ -100,12 +105,12 @@ def download_zip(bucket_name, filename, file = None):
 
     # Count the number of objects and remove any files more than 
     files = os.listdir(unzipped_cutouts_dir)
+    if len(files) > 10000:
+        response.messages.append("A maximum of 10000 objects is allowed per batch - your batch has been has been truncated and anything in excess of 10000 objects has been removed.")
     for file in files[10000:]:
         os.remove(file)
 
-    # rosas_test2 = str(glob.glob("/tmp/" + file + "/*"))
     cutouts = glob.glob("/tmp/" + file + "/*")
-    # logger.log_text(rosas_test2)
     return cutouts
 
 def build_and_upload_manifest(urls, email, sourceId, bucket, destination_root = ""):
@@ -116,7 +121,6 @@ def build_and_upload_manifest(urls, email, sourceId, bucket, destination_root = 
     bucket = gcs.bucket(bucket)
 
     # loop over urls
-
     with open('/tmp/manifest.csv', 'w', newline='') as csvfile:
         fieldnames = ['email', 'location:1', 'external_id']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -127,7 +131,6 @@ def build_and_upload_manifest(urls, email, sourceId, bucket, destination_root = 
             writer.writerow({'email': email, 'location:1': url, 'external_id': str(round(time.time() * 1000) + offset) })
             offset += 1
     
-        
     manifestBlob = bucket.blob(destination_root + "manifest.csv")
 
     manifestBlob.upload_from_filename("/tmp/manifest.csv")
@@ -135,24 +138,31 @@ def build_and_upload_manifest(urls, email, sourceId, bucket, destination_root = 
 
 def validate_project_metadata(email, vendor_project_id, vendor_batch_id = None):
     global db
+    global validator
     db = init_connection_engine()
     newOwner = False
+
+    # Lookup if owner record exists, if so then return it
     ownerId = lookup_owner_record(email)
 
-    # First lookup owner
-    if (isinstance(ownerId, int)):
-        logger.log_text("Found owner record")
+    # Create owner record
+    if validator.error == False:
+        if ownerId == None:
+            newOwner = True
+            ownerId = create_new_owner_record(email)
     else:
-        newOwner = True
-        ownerId = create_new_owner_record(email)
-
+        return
+        
     # Then, lookup project
-    if(newOwner == True):
-        projectId = lookup_project_record(vendor_project_id)
+    if validator.error == False:
+        if(newOwner == True):
+            projectId = create_new_project_record(vendor_project_id)
+        else:
+            projectId = lookup_project_record(vendor_project_id)
+            if projectId is None:
+                projectId = create_new_project_record(ownerId, vendor_project_id)
     else:
-        projectId = lookup_project_record(vendor_project_id)
-        if projectId is None:
-            projectId = create_new_project_record(ownerId, vendor_project_id)
+        return
 
     # Then, lookup batch info
     batchId = check_batch_status(projectId, vendor_project_id) # To-do: Look into whether or not this would be a good time to check with Zoony on the status of the batches
@@ -277,96 +287,92 @@ def check_batch_status(project_id, vendor_project_id):
 
 def create_new_project_record(ownerId, vendorProjectId):
     global db
+    global validator
+    global response
     stmt = sqlalchemy.text(
         "INSERT INTO citizen_science_projects (vendor_project_id, owner_id, project_status)"
         " VALUES (:vendorProjectId, :ownerId, :projectStatus) RETURNING cit_sci_proj_id"
     )
+    project_id = None
     try:
         # Using a with statement ensures that the connection is always released
         # back into the pool at the end of statement (even if an error occurs)
         with db.connect() as conn:
             for row in conn.execute(stmt, vendorProjectId=vendorProjectId, ownerId=ownerId, projectStatus='active'):
-                projectId = row['cit_sci_proj_id']
+                project_id = row['cit_sci_proj_id']
                 conn.close()
 
     except Exception as e:
-        # If something goes wrong, handle the error in this section. This might
-        # involve retrying or adjusting parameters depending on the situation.
+        validator.error = True
+        response.status = "error"
+        response.messages.append("An error occurred while attempting to create a new project owner record for you - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
 
-        # TO-DO: Add logger
-        # logger.exception(e)
-        print(e)
-        # return Response(
-        #     status=500,
-        #     response="An error occurred while creating citizen_science_projects record(s)."
-        # )
-        return e
-    # return projectId['cit_sci_proj_id']
-    return projectId
+    return project_id
 
 def lookup_project_record(vendorProjectId):
     global db
+    global response
+    global validator
     project_id = None
     stmt = sqlalchemy.text(
-        "SELECT cit_sci_proj_id FROM citizen_science_projects WHERE vendor_project_id = :vendorProjectId"
+        "SELECT cit_sci_proj_id, project_status FROM citizen_science_projects WHERE vendor_project_id = :vendorProjectId"
     )
+    project_id = None
     try:
         # Using a with statement ensures that the connection is always released
         # back into the pool at the end of statement (even if an error occurs)
         with db.connect() as conn:
             for row in conn.execute(stmt, vendorProjectId=vendorProjectId):
+                status = row['project_status']
+                if status == "complete":
+                    response.status = "error"
+                    validator.error = True
+                    response.messages.append("This project has already been completed - either create a new project or contact Rubin to request for the project to be reopened.")
+
                 project_id = row['cit_sci_proj_id']
                 conn.close()
 
     except Exception as e:
-        # If something goes wrong, handle the error in this section. This might
-        # involve retrying or adjusting parameters depending on the situation.
+        validator.error = True
+        response.status = "error"
+        response.messages.append("An error occurred while attempting to lookup your project record - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
 
-        # TO-DO: Add logger
-        # logger.exception(e)
-        print(e)
-        # return Response(
-        #     status=500,
-        #     response="An error occurred while reading the citizen_science_projects table."
-        # )
-        return e
     return project_id
 
 def create_new_owner_record(email):
     global db
+    global validator
+    global response
     stmt = sqlalchemy.text(
         "INSERT INTO citizen_science_owners (email, status)"
         " VALUES (:email, :status) RETURNING cit_sci_owner_id"
     )
+    owner_id = None;
     try:
         # Using a with statement ensures that the connection is always released
         # back into the pool at the end of statement (even if an error occurs)
         with db.connect() as conn:
             for row in conn.execute(stmt, email=email, status='active'):
-                ownerId = row['cit_sci_owner_id']
+                owner_id = row['cit_sci_owner_id']
                 conn.close()
-                return ownerId
+                return owner_id
 
     except Exception as e:
-        # If something goes wrong, handle the error in this section. This might
-        # involve retrying or adjusting parameters depending on the situation.
+        validator.error = True
+        response.status = "error"
+        response.messages.append("An error occurred while attempting to create a new project owner record for you - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
 
-        # TO-DO: Add logger
-        # logger.exception(e)
-        print(e)
-        return Response(
-            status=500,
-            response="An error occurred while creating citizen_science_owners record(s)."
-        )
-
-    return ownerId
+    return owner_id
 
 def lookup_owner_record(emailP):
     global db
+    global validator
+    global response
     stmt = sqlalchemy.text(
-        "SELECT cit_sci_owner_id FROM citizen_science_owners WHERE email=:email"
+        "SELECT cit_sci_owner_id, status FROM citizen_science_owners WHERE email=:email"
     )
-    ownerId = ""
+    ownerId = None
+    status = ""
 
     try:
         # Using a with statement ensures that the connection is always released
@@ -374,23 +380,19 @@ def lookup_owner_record(emailP):
         with db.connect() as conn:
             for row in conn.execute(stmt, email=emailP):
                 ownerId = row['cit_sci_owner_id']
+                status = row['status']
+                if status == "blocked" or status == "disabled":
+                    validator.error = True
+                    response.status = "error"
+                    response.messages.append("You are not/no longer eligible to use the Rubin Science Platform to send data to Zooniverse.")
                 conn.close()
                 return ownerId
 
     except Exception as e:
-        # If something goes wrong, handle the error in this section. This might
-        # involve retrying or adjusting parameters depending on the situation.
-
-        # TO-DO: Add logger
-        # logger.exception(e)
-        print(e)
-        # return Response(
-        #     status=500,
-        #     response="An error occurred while reading from the citizen_science_owners table."
-        # )
-        return e
+        validator.error = True
+        response.status = "error"
+        response.messages.append("An error occurred while looking up your projects owner record - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
    
-    # return ownerId.lastrowid
     return ownerId
 
 def lookup_meta_record(sourceId, sourceIdType):
