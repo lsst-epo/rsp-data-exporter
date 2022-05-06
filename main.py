@@ -1,10 +1,11 @@
-import os, fnmatch
+import os, fnmatch, json
 import glob # for debugging
 import subprocess
 import csv
 from flask import Flask, request, Response
 from google.cloud import storage
 import panoptes_client
+from panoptes_client import Panoptes, Project, SubjectSet
 import sqlalchemy
 from pprint import pprint
 # Imports the Cloud Logging client library
@@ -30,18 +31,15 @@ logging_client = logging.Client()
 log_name = "rosas"
 logger = logging_client.logger(log_name)
 
-@app.route("/new-bucket-ingest")
+@app.route("/citizen-science-bucket-ingest")
 def download_bucket_data_and_process():
-    logger.log_text("rosas - inside of new-bucket-ingest!")
-    logger.log_text("rosas - about to log guid!")
     guid = request.args.get("guid")
     email = request.args.get("email")
     vendor_project_id = request.args.get("vendor_project_id")
-    # logger.log_text(rosas_test)
-    logger.log_text("just logged guid!")
-    logger.log_text(request.args.get("email"))
+    vendor_batch_id = request.args.get("vendor_batch_id")
 
-    valid_project_metadata = validate_project_metadata(email, vendor_project_id)
+    # has_active_batch = check_subject_set_status(vendor_project_id)
+    valid_project_metadata = validate_project_metadata(email, vendor_project_id, vendor_batch_id)
 
     if valid_project_metadata is True:
         cutouts = download_zip(CLOUD_STORAGE_BUCKET_HIPS2FITS, guid + ".zip", guid)
@@ -56,18 +54,28 @@ def download_bucket_data_and_process():
         for cutout in cutouts:
             if cutouts_count == 9999: # cutout max limit
                 break
-            destination_filename = cutout.replace("/tmp/" + guid + "/", "")
+            # destination_filename = cutout.replace("/tmp/" + guid + "/", "")
+            destination_filename = cutout.replace("/tmp/", "")
             blob = bucket.blob(destination_filename)
             blob.upload_from_filename(cutout)
             urls.append(blob.public_url)
             # Insert meta records
-            logger.log_text("about to insert meta records")
-            insertMetaRecord(blob.public_url, str(round(time.time() * 1000)) , 'sourceId', vendor_project_id)
+            insert_meta_record(blob.public_url, str(round(time.time() * 1000)) , 'sourceId', vendor_project_id)
             cutouts_count += 1
 
-        manifest_url = build_and_upload_manifest(urls, email, "556677", CLOUD_STORAGE_BUCKET_HIPS2FITS)
+        manifest_url = build_and_upload_manifest(urls, email, "556677", CLOUD_STORAGE_BUCKET_HIPS2FITS, guid + "/")
 
-        return manifest_url
+        return json.dumps({
+            "status": "success",
+            "manifest_url": manifest_url
+        })
+        
+        manifest_url
+    else:
+        return json.dumps({
+            "status": "error",
+            "message": "some error occurred"
+        })
 
 # Accepts the bucket name and filename to download and returns the path of the downloaded file
 def download_zip(bucket_name, filename, file = None):
@@ -77,19 +85,23 @@ def download_zip(bucket_name, filename, file = None):
     # Get the bucket that the file will be uploaded to.
     bucket = gcs.bucket(bucket_name)
 
-    logger.log_text("rosas - about to download file from GCS")
     # Download the file to /tmp storage
-    blob = bucket.blob("tmp/" + filename)
+    blob = bucket.blob(filename)
     zipped_cutouts = "/tmp/" + filename
     blob.download_to_filename(zipped_cutouts)
 
-    logger.log_text("rosas - about to log the /tmp directory contents")
-    rosas_test = str(glob.glob("/tmp/*"))
-    logger.log_text(rosas_test)
+    # logger.log_text("rosas - about to log the /tmp directory contents")
+    # rosas_test = str(glob.glob("/tmp/*"))
+    # logger.log_text(rosas_test)
 
     unzipped_cutouts_dir = "/tmp/" + file
     os.mkdir(unzipped_cutouts_dir)
     shutil.unpack_archive(zipped_cutouts, unzipped_cutouts_dir, "zip")
+
+    # Count the number of objects and remove any files more than 
+    files = os.listdir(unzipped_cutouts_dir)
+    for file in files[10000:]:
+        os.remove(file)
 
     # rosas_test2 = str(glob.glob("/tmp/" + file + "/*"))
     cutouts = glob.glob("/tmp/" + file + "/*")
@@ -121,49 +133,39 @@ def build_and_upload_manifest(urls, email, sourceId, bucket, destination_root = 
     manifestBlob.upload_from_filename("/tmp/manifest.csv")
     return manifestBlob.public_url
 
-def validate_project_metadata(email, vendor_project_id):
+def validate_project_metadata(email, vendor_project_id, vendor_batch_id = None):
     global db
     db = init_connection_engine()
     newOwner = False
-    ownerId = lookupOwnerRecord(email)
+    ownerId = lookup_owner_record(email)
 
     # First lookup owner
     if (isinstance(ownerId, int)):
         logger.log_text("Found owner record")
     else:
-        logger.log_text("NO owner record found")
         newOwner = True
-        ownerId = createNewOwnerRecord(email)
+        ownerId = create_new_owner_record(email)
 
     # Then, lookup project
     if(newOwner == True):
-        logger.log_text("newOwner is true, so calling lookupProjectRecord()")
-        projectId = lookupProjectRecord(vendor_project_id)
+        projectId = lookup_project_record(vendor_project_id)
     else:
-        logger.log_text("newOwner is false, so first looking up if a project exists")
-        projectId = lookupProjectRecord(vendor_project_id)
-        logger.log_text("projectId 1: " + str(projectId))
+        projectId = lookup_project_record(vendor_project_id)
         if projectId is None:
-            projectId = createNewProjectRecord(ownerId, vendor_project_id)
-            logger.log_text("projectId 2: " + str(projectId))
+            projectId = create_new_project_record(ownerId, vendor_project_id)
 
     # Then, lookup batch info
-    logger.log_text("about to check batch status")
-    batchId = checkBatchStatus(projectId)
-    logger.log_text("batch status: " + str(batchId))
+    batchId = check_batch_status(projectId, vendor_project_id) # To-do: Look into whether or not this would be a good time to check with Zoony on the status of the batches
 
     if(batchId > 0):
         # Do not allow for the creation of an existing batch if there are 
-        logger.log_text("batchID is > 0!!!")
         return Response(
             status=500,
             response="You cannot send a new batch of data to your citizen science project because you already have an active, uncompleted batch of data in-progress."
         )
     else:
-        logger.log_text("batchId is < 0, creating new batch record")
         # Create new batch record
-        batchId = createNewBatch(projectId)
-        logger.log_text("new batchId: " + str(batchId))
+        batchId = create_new_batch(projectId, vendor_batch_id)
 
         if(batchId > 0):
             db.dispose()
@@ -171,8 +173,9 @@ def validate_project_metadata(email, vendor_project_id):
         else:
             db.dispose()
             return False
-        
-@app.route("/citizen-science-ingest")
+
+# To-do: Add vendor_batch_id to workflow of this function/route
+@app.route("/citizen-science-butler-ingest")
 def butler_retrieve_data_and_upload():
     global db
     db = init_connection_engine()
@@ -181,7 +184,6 @@ def butler_retrieve_data_and_upload():
     source_id = request.args.get("sourceId")
     vendor_project_id = request.args.get("vendorProjectId")
     output = subprocess.run(['sh', '/opt/lsst/software/server/run.sh', email, collection], stdout=subprocess.PIPE).stdout.decode('utf-8')
-    # logger.log_text(output)
 
     # Create a Cloud Storage client.
     gcs = storage.Client()
@@ -200,23 +202,19 @@ def butler_retrieve_data_and_upload():
 
     if validate_project_metadata is True:
         # Finally, insert meta records
-        logger.log_text("about to insert meta records")
-        insertMetaRecord(manifest_url, source_id, 'sourceId', vendor_project_id)
+        insert_meta_record(manifest_url, source_id, 'sourceId', vendor_project_id)
     return manifest_url
         
-def createNewBatch(projectId):
-    logger.log_text("rosas - inside createNewBatch")
+def create_new_batch(project_id, vendor_batch_id):
     global db
     stmt = sqlalchemy.text(
-        "INSERT INTO citizen_science_batches (cit_sci_proj_id, batch_status)"
-        "VALUES (:projectId, 'ACTIVE') RETURNING cit_sci_batch_id"
+        "INSERT INTO citizen_science_batches (cit_sci_proj_id, batch_status, vendor_batch_id)"
+        "VALUES (:projectId, 'ACTIVE', :vendorBatchId) RETURNING cit_sci_batch_id"
     )
     try:
         batchId = -1;
         with db.connect() as conn:
-            for row in conn.execute(stmt, projectId=projectId):
-                logger.log_text("rosas - about to low row")
-                logger.log_text(str(row))
+            for row in conn.execute(stmt, projectId=project_id, vendorBatchId=vendor_batch_id):
                 batchId = row['cit_sci_batch_id']
             conn.close()
     except Exception as e:
@@ -228,24 +226,56 @@ def createNewBatch(projectId):
         return e
     return batchId
 
-def checkBatchStatus(projectId):
+def check_batch_status(project_id, vendor_project_id):
+    # First, look up batches in the database, which may 
     global db
+    batch_id = -1
+    vendor_batch_id_db = 0
     stmt = sqlalchemy.text(
         "SELECT * FROM citizen_science_batches WHERE cit_sci_proj_id = :projectId AND batch_status = 'ACTIVE'"
     )
     try:
-        batchId = -1
         with db.connect() as conn:
-            records = conn.execute(stmt, projectId=projectId)
+            records = conn.execute(stmt, projectId=project_id)
             if(records.rowcount > 0):
-                batchId = records.first()['cit_sci_batch_id']
+                record = records.first()
+                batch_id = record['cit_sci_batch_id']
+                vendor_batch_id_db = record['vendor_batch_id']
             conn.close()
     except Exception as e:
         print(e)
 
-    return batchId
+    if batch_id > 0: # An active batch record was found in the DB
+        # Call the Zooniverse API to get all subject sets for the project
+        project = Project.find(int(vendor_project_id))
 
-def createNewProjectRecord(ownerId, vendorProjectId):
+        update_batch_record = False;
+        for sub in list(project.links.subject_sets):
+            if str(vendor_batch_id_db) == sub.id:
+                for completeness_score in sub.completeness:
+                    if sub.completeness[completeness_score] == 1.0:
+                        update_batch_record = True
+                    else:
+                        update_batch_record = False
+                        break
+        if update_batch_record == True:
+            updt_stmt = sqlalchemy.text(
+                "UPDATE citizen_science_batches SET batch_status = 'COMPLETE' WHERE cit_sci_proj_id = :projectId AND cit_sci_batch_id = :batchId"
+            )
+            try:
+                # batch_id = -1
+                with db.connect() as conn:
+                    conn.execute(updt_stmt, projectId=project_id, batchId=batch_id)
+                    conn.close()
+                
+            except Exception as e:
+                print(e)
+            
+            return -1 # no active batches
+    
+    return batch_id
+
+def create_new_project_record(ownerId, vendorProjectId):
     global db
     stmt = sqlalchemy.text(
         "INSERT INTO citizen_science_projects (vendor_project_id, owner_id, project_status)"
@@ -274,8 +304,9 @@ def createNewProjectRecord(ownerId, vendorProjectId):
     # return projectId['cit_sci_proj_id']
     return projectId
 
-def lookupProjectRecord(vendorProjectId):
+def lookup_project_record(vendorProjectId):
     global db
+    project_id = None
     stmt = sqlalchemy.text(
         "SELECT cit_sci_proj_id FROM citizen_science_projects WHERE vendor_project_id = :vendorProjectId"
     )
@@ -284,7 +315,7 @@ def lookupProjectRecord(vendorProjectId):
         # back into the pool at the end of statement (even if an error occurs)
         with db.connect() as conn:
             for row in conn.execute(stmt, vendorProjectId=vendorProjectId):
-                projectId = row['cit_sci_proj_id']
+                project_id = row['cit_sci_proj_id']
                 conn.close()
 
     except Exception as e:
@@ -299,9 +330,9 @@ def lookupProjectRecord(vendorProjectId):
         #     response="An error occurred while reading the citizen_science_projects table."
         # )
         return e
-    return projectId
+    return project_id
 
-def createNewOwnerRecord(email):
+def create_new_owner_record(email):
     global db
     stmt = sqlalchemy.text(
         "INSERT INTO citizen_science_owners (email, status)"
@@ -328,10 +359,9 @@ def createNewOwnerRecord(email):
             response="An error occurred while creating citizen_science_owners record(s)."
         )
 
-    # return ownerId['cit_sci_owner_id']
     return ownerId
 
-def lookupOwnerRecord(emailP):
+def lookup_owner_record(emailP):
     global db
     stmt = sqlalchemy.text(
         "SELECT cit_sci_owner_id FROM citizen_science_owners WHERE email=:email"
@@ -363,7 +393,7 @@ def lookupOwnerRecord(emailP):
     # return ownerId.lastrowid
     return ownerId
 
-def lookupMetaRecord(sourceId, sourceIdType):
+def lookup_meta_record(sourceId, sourceIdType):
     global db
     stmt = sqlalchemy.text(
         "SELECT cit_sci_meta_id FROM citizen_science_meta WHERE source_id=:sourceId AND source_id_type=:sourceIdType"
@@ -392,7 +422,7 @@ def lookupMetaRecord(sourceId, sourceIdType):
     # return ownerId.lastrowid
     return metaId
 
-def insertMetaRecord(uri, sourceId, sourceIdType, projectId):
+def insert_meta_record(uri, sourceId, sourceIdType, projectId):
     global db
     edcVerId = 11000222
     public = True
@@ -409,18 +439,18 @@ def insertMetaRecord(uri, sourceId, sourceIdType, projectId):
             logger.log_text(repr(conn))
             for row in conn.execute(stmt, edcVerIdSQL=edcVerId, sourceIdSQL=sourceId, sourceIdTypeSQL=sourceIdType, uriSQL=uri, publicSQL=public):
                 metaRecordId = row['cit_sci_meta_id']
-                errorOccurred = True if insertLookupRecord(metaRecordId, projectId) else False
+                errorOccurred = True if insert_lookup_record(metaRecordId, projectId) else False
             conn.close()
 
     except Exception as e:
-        # Is the exception because of a duplicate key werror? If so, lookup the ID of the meta record and perform the insert into the lookup table
+        # Is the exception because of a duplicate key error? If so, lookup the ID of the meta record and perform the insert into the lookup table
         if "non_dup_records" in e.__str__():
-            metaId = lookupMetaRecord(sourceId, sourceIdType)
-            return insertLookupRecord(metaId, projectId)
+            metaId = lookup_meta_record(sourceId, sourceIdType)
+            return insert_lookup_record(metaId, projectId)
         return False
     return errorOccurred
 
-def insertLookupRecord(metaRecordId, projectId):
+def insert_lookup_record(metaRecordId, projectId):
     global db
     print("inside of the lookup record function")
     stmt = sqlalchemy.text(
