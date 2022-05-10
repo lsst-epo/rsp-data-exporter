@@ -1,7 +1,5 @@
-import os, fnmatch, json
+import os, fnmatch, json, subprocess, csv, shutil, time
 import glob # for debugging
-import subprocess
-import csv
 from citizen_science_validator import CitizenScienceValidator
 from data_exporter_response import DataExporterResponse
 from flask import Flask, request, Response
@@ -12,9 +10,6 @@ import sqlalchemy
 from pprint import pprint
 # Imports the Cloud Logging client library
 from google.cloud import logging
-import os
-import shutil
-import time
 # import lsst.daf.butler as dafButler
 
 app = Flask(__name__)
@@ -36,6 +31,32 @@ response = DataExporterResponse()
 validator = CitizenScienceValidator()
 debug = False
 
+@app.route("/citizen-science-ingest-status")
+def check_status_of_previously_executed_ingest():
+    global response
+    guid = request.args.get("guid")
+
+    gcs = storage.Client()
+
+    manifest_path = guid + "/manifest.csv"
+
+    # Get the bucket that the file will be uploaded to.
+    bucket = gcs.bucket(CLOUD_STORAGE_BUCKET_HIPS2FITS)
+    exists = storage.Blob(bucket=bucket, name=manifest_path).exists(gcs)
+
+    response = DataExporterResponse()
+    response.messages = []
+
+    if exists:
+        response.status = "success"
+        response.manifest_url = "https://storage.googleapis.com/citizen-science-data/" + guid + "/manifest.csv"
+    else:
+        response.status = "error"
+        response.messages.append("The job either failed or is still processing, please try again later.")
+
+    res = json.dumps(response.__dict__)
+    return res
+
 @app.route("/citizen-science-bucket-ingest")
 def download_bucket_data_and_process():
     global response, validator, debug
@@ -44,6 +65,7 @@ def download_bucket_data_and_process():
     vendor_project_id = request.args.get("vendor_project_id")
     vendor_batch_id = request.args.get("vendor_batch_id")
     debug = bool(request.args.get("debug"))
+    # large_import = bool(request.args.get("large_import"))
     response = DataExporterResponse()
     response.messages = []
     validator = CitizenScienceValidator()
@@ -54,32 +76,16 @@ def download_bucket_data_and_process():
 
     if validator.error is False:
         cutouts = download_zip(CLOUD_STORAGE_BUCKET_HIPS2FITS, guid + ".zip", guid)
+    
+        if validator.error is False:
+            urls = upload_cutouts(cutouts, vendor_project_id)
 
-        # Get the bucket that the file will be uploaded to.
-        # Create a Cloud Storage client.
-        gcs = storage.Client()
-        bucket = gcs.bucket(CLOUD_STORAGE_BUCKET_HIPS2FITS)
-        urls = []
-
-        cutouts_count = 0
-        time_mark(debug, "Start of upload & inserting of metadata...")
-        for cutout in cutouts:
-            # if cutouts_count == 9999: # cutout max limit
-            #     break
-            # destination_filename = cutout.replace("/tmp/" + guid + "/", "")
-            destination_filename = cutout.replace("/tmp/", "")
-            blob = bucket.blob(destination_filename)
+            if validator.error is False:
             
-            blob.upload_from_filename(cutout)
-            urls.append(blob.public_url)
-            # Insert meta records
-            insert_meta_record(blob.public_url, str(round(time.time() * 1000)) , 'sourceId', vendor_project_id)
-            cutouts_count += 1
-        time_mark(debug, "Upload and metadata insertion finished...")
-        manifest_url = build_and_upload_manifest(urls, email, "556677", CLOUD_STORAGE_BUCKET_HIPS2FITS, guid + "/")
-
-        response.status = "success"
-        response.manifest_url = manifest_url
+                manifest_url = build_and_upload_manifest(urls, email, "556677", CLOUD_STORAGE_BUCKET_HIPS2FITS, guid + "/")
+            
+                response.status = "success"
+                response.manifest_url = manifest_url
     else:
         response.status = "error"
         if response.messages == None or len(response.messages) == 0:
@@ -89,6 +95,27 @@ def download_bucket_data_and_process():
     logger.log_text(res)
     time_mark(debug, "Done processing, return response to notebook aspect")
     return res
+
+def upload_cutouts(cutouts, vendor_project_id):
+    # Get the bucket that the file will be uploaded to.
+    # Create a Cloud Storage client.
+    gcs = storage.Client()
+    bucket = gcs.bucket(CLOUD_STORAGE_BUCKET_HIPS2FITS)
+    urls = []
+
+    cutouts_count = 0
+    time_mark(debug, "Start of upload & inserting of metadata...")
+    for cutout in cutouts:
+        destination_filename = cutout.replace("/tmp/", "")
+        blob = bucket.blob(destination_filename)
+        
+        blob.upload_from_filename(cutout)
+        urls.append(blob.public_url)
+        # Insert meta records
+        insert_meta_record(blob.public_url, str(round(time.time() * 1000)) , 'sourceId', vendor_project_id)
+        cutouts_count += 1
+    time_mark(debug, "Upload and metadata insertion finished...")
+    return urls
 
 # Accepts the bucket name and filename to download and returns the path of the downloaded file
 def download_zip(bucket_name, filename, file = None):
@@ -140,8 +167,13 @@ def download_zip(bucket_name, filename, file = None):
     # logger.log_text("rosas - about to log the " + unzipped_cutouts_dir + "/* directory contents")
     # rosas_test = str(glob.glob(unzipped_cutouts_dir + "/*"))
     # logger.log_text(rosas_test)
+
+    # Now, limit the files sent to image files
     time_mark(debug, "Start of grabbing all the cutouts for return...")
-    cutouts = glob.glob("/tmp/" + file + "/*")
+    pngs = glob.glob("/tmp/" + file + "/*.png")
+    jpegs = glob.glob("/tmp/" + file + "/*.jpeg")
+    jpgs = glob.glob("/tmp/" + file + "/*.jpg")
+    cutouts = pngs + jpegs + jpgs
     time_mark(debug, "Grabbing cutouts finished...")
     return cutouts
 
