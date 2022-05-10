@@ -5,7 +5,7 @@ class DataExporterResponse():
     messages = []
     manifest_url = ""
 
-    def __init__(self, status = None, message = None, manifest_url = None):
+    def __init__(self, status = None, messages = [], manifest_url = None):
         self.status = status
-        self.message = message
+        self.messages = messages
         self.manifest_url = manifest_url
