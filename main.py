@@ -92,7 +92,7 @@ def download_bucket_data_and_process():
             response.messages.append("An error occurred while processing the data batch, please try again later.")
 
     res = json.dumps(response.__dict__)
-    logger.log_text(res)
+    # logger.log_text(res)
     time_mark(debug, "Done processing, return response to notebook aspect")
     return res
 
@@ -150,7 +150,6 @@ def download_zip(bucket_name, filename, file = None):
     files = os.listdir(unzipped_cutouts_dir)
     time_mark(debug, "Dir count finished...")
     max_objects_count = 100
-    logger.log_text("rosas - logging validator.data_rights_approved : " + str(validator.data_rights_approved)) 
     if validator.data_rights_approved == True:
         max_objects_count = 10000
     else:
@@ -203,7 +202,7 @@ def build_and_upload_manifest(urls, email, sourceId, bucket, destination_root = 
     return manifestBlob.public_url
 
 def validate_project_metadata(email, vendor_project_id, vendor_batch_id = None):
-    global db, validator, debug
+    global db, validator, debug, response
     db = init_connection_engine()
     newOwner = False
 
@@ -243,6 +242,10 @@ def validate_project_metadata(email, vendor_project_id, vendor_batch_id = None):
             else:
                 # db.dispose()
                 return False
+        else:
+            validator.error = True
+            response.messages.append("You currently have an active batch of data on the Zooniverse platform and cannot create a new batch until the current batch has been completed.")
+            return False
     else:
         return False
 
@@ -316,7 +319,11 @@ def check_batch_status(project_id, vendor_project_id):
                 vendor_batch_id_db = record['vendor_batch_id']
             conn.close()
     except Exception as e:
-        print(e)
+        logger.log_text(e)
+        validator.error = True
+        response.status = "error"
+        response.messages.append("An error occurred while attempting to lookup your batch records - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
+        return
 
     if batch_id > 0: # An active batch record was found in the DB
         # Call the Zooniverse API to get all subject sets for the project
@@ -325,8 +332,8 @@ def check_batch_status(project_id, vendor_project_id):
         update_batch_record = False;
         for sub in list(project.links.subject_sets):
             if str(vendor_batch_id_db) == sub.id:
-                for completeness_score in sub.completeness:
-                    if sub.completeness[completeness_score] == 1.0:
+                for completeness_key in sub.completeness:
+                    if sub.completeness[completeness_key] == 1.0:
                         update_batch_record = True
                     else:
                         update_batch_record = False
@@ -342,9 +349,11 @@ def check_batch_status(project_id, vendor_project_id):
                     conn.close()
                 
             except Exception as e:
-                print(e)
-            
-            return -1 # no active batches
+                logger.log_text(e)
+                validator.error = True
+                response.status = "error"
+                response.messages.append("An error occurred while attempting to create a new data batch record for you - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
+            # return batch_id # no active batches
     
     return batch_id
 
