@@ -8,6 +8,8 @@ import panoptes_client
 from panoptes_client import Panoptes, Project, SubjectSet
 import sqlalchemy
 from pprint import pprint
+import numpy as np
+import threading
 # Imports the Cloud Logging client library
 from google.cloud import logging
 # import lsst.daf.butler as dafButler
@@ -30,6 +32,7 @@ logger = logging_client.logger(log_name)
 response = DataExporterResponse()
 validator = CitizenScienceValidator()
 debug = False
+urls = []
 
 @app.route("/citizen-science-ingest-status")
 def check_status_of_previously_executed_ingest():
@@ -59,7 +62,7 @@ def check_status_of_previously_executed_ingest():
 
 @app.route("/citizen-science-bucket-ingest")
 def download_bucket_data_and_process():
-    global response, validator, debug
+    global response, validator, debug, urls
     guid = request.args.get("guid")
     email = request.args.get("email")
     vendor_project_id = request.args.get("vendor_project_id")
@@ -69,6 +72,7 @@ def download_bucket_data_and_process():
     response = DataExporterResponse()
     response.messages = []
     validator = CitizenScienceValidator()
+    urls = []
 
     time_mark(debug, __name__)
     
@@ -96,26 +100,49 @@ def download_bucket_data_and_process():
     time_mark(debug, "Done processing, return response to notebook aspect")
     return res
 
+# Note: plural
 def upload_cutouts(cutouts, vendor_project_id):
-    # Get the bucket that the file will be uploaded to.
-    # Create a Cloud Storage client.
+    global debug, urls
+
+    # Beginning of optimization code
+    time_mark(debug, "Start of upload...")
+    if len(cutouts) > 2000: # Arbitrary threshold for threading
+        logger.log_text("inside of the upload_cutouts len(cutouts) IF code block")
+        subset_count = round(len(np.array(cutouts)) / 1000)
+        logger.log_text("subset_count: " + str(subset_count))
+        sub_cutouts_arr = np.split(np.array(cutouts), subset_count) # create sub arrays divided by 1k cutouts
+        for sub_arr in sub_cutouts_arr:
+            t = threading.Thread(target=upload_cutout_arr, args=(sub_arr,))
+            t.start()
+            t.join()
+    else:
+        upload_cutout_arr(cutouts)
+    time_mark(debug, "End of upload...")
+
+    time_mark(debug, "Start of upload & inserting of metadata...")
+    insert_meta_records(urls, vendor_project_id)
+    time_mark(debug, "End of inserting of metadata records")
+    return urls
+
+# Note: singular 
+def upload_cutout_arr(cutouts):
+    global urls
     gcs = storage.Client()
     bucket = gcs.bucket(CLOUD_STORAGE_BUCKET_HIPS2FITS)
-    urls = []
 
-    cutouts_count = 0
-    time_mark(debug, "Start of upload & inserting of metadata...")
     for cutout in cutouts:
         destination_filename = cutout.replace("/tmp/", "")
         blob = bucket.blob(destination_filename)
         
         blob.upload_from_filename(cutout)
         urls.append(blob.public_url)
-        # Insert meta records
-        insert_meta_record(blob.public_url, str(round(time.time() * 1000)) , 'sourceId', vendor_project_id)
-        cutouts_count += 1
-    time_mark(debug, "Upload and metadata insertion finished...")
-    return urls
+
+    return
+        
+def insert_meta_records(urls, vendor_project_id):
+    for url in urls:
+        insert_meta_record(url, str(round(time.time() * 1000)) , 'sourceId', vendor_project_id)
+    return
 
 # Accepts the bucket name and filename to download and returns the path of the downloaded file
 def download_zip(bucket_name, filename, file = None):
@@ -592,7 +619,7 @@ def init_tcp_connection_engine(db_config):
 
 def time_mark(debug, milestone):
     if debug == True:
-        print("Time mark - " + str(round(time.time() * 1000)) + " - in " + milestone);
+        logger.log_text("Time mark - " + str(round(time.time() * 1000)) + " - in " + milestone);
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
