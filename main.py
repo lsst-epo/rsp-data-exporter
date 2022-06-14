@@ -18,6 +18,7 @@ app = Flask(__name__)
 
 CLOUD_STORAGE_BUCKET = os.environ['CLOUD_STORAGE_BUCKET']
 CLOUD_STORAGE_BUCKET_HIPS2FITS = os.environ['CLOUD_STORAGE_BUCKET_HIPS2FITS']
+CLOUD_STORAGE_CIT_SCI_PUBLIC = os.environ["CLOUD_STORAGE_CIT_SCI_PUBLIC"]
 DB_USER = os.environ['DB_USER']
 DB_PASS = os.environ['DB_PASS']
 DB_NAME = os.environ['DB_NAME']
@@ -44,7 +45,7 @@ def check_status_of_previously_executed_ingest():
     manifest_path = guid + "/manifest.csv"
 
     # Get the bucket that the file will be uploaded to.
-    bucket = gcs.bucket(CLOUD_STORAGE_BUCKET_HIPS2FITS)
+    bucket = gcs.bucket(CLOUD_STORAGE_CIT_SCI_PUBLIC)
     exists = storage.Blob(bucket=bucket, name=manifest_path).exists(gcs)
 
     response = DataExporterResponse()
@@ -86,7 +87,7 @@ def download_bucket_data_and_process():
 
             if validator.error is False:
             
-                manifest_url = build_and_upload_manifest(urls, email, "556677", CLOUD_STORAGE_BUCKET_HIPS2FITS, guid + "/")
+                manifest_url = build_and_upload_manifest(urls, email, "556677", CLOUD_STORAGE_CIT_SCI_PUBLIC, guid + "/")
             
                 response.status = "success"
                 response.manifest_url = manifest_url
@@ -106,17 +107,25 @@ def upload_cutouts(cutouts, vendor_project_id):
 
     # Beginning of optimization code
     time_mark(debug, "Start of upload...")
-    if len(cutouts) > 2000: # Arbitrary threshold for threading
+    if len(cutouts) > 500: # Arbitrary threshold for threading
         logger.log_text("inside of the upload_cutouts len(cutouts) IF code block")
-        subset_count = round(len(np.array(cutouts)) / 1000)
+        subset_count = round(len(np.array(cutouts)) / 250)
         logger.log_text("subset_count: " + str(subset_count))
         sub_cutouts_arr = np.split(np.array(cutouts), subset_count) # create sub arrays divided by 1k cutouts
-        for sub_arr in sub_cutouts_arr:
-            t = threading.Thread(target=upload_cutout_arr, args=(sub_arr,))
-            t.start()
-            t.join()
+        threads = []
+        for i, sub_arr in enumerate(sub_cutouts_arr):
+            logger.log_text("i : " + str(i));
+            t = threading.Thread(target=upload_cutout_arr, args=(sub_arr,str(i),))
+            threads.append(t)
+            logger.log_text("starting thread #" + str(i))
+            threads[i].start()
+        
+        for thread in threads:
+            logger.log_text("joining thread!")
+            thread.join()
+
     else:
-        upload_cutout_arr(cutouts)
+        upload_cutout_arr(cutouts, str(1))
     time_mark(debug, "End of upload...")
 
     time_mark(debug, "Start of upload & inserting of metadata...")
@@ -125,17 +134,24 @@ def upload_cutouts(cutouts, vendor_project_id):
     return urls
 
 # Note: singular 
-def upload_cutout_arr(cutouts):
+def upload_cutout_arr(cutouts, i):
     global urls
     gcs = storage.Client()
-    bucket = gcs.bucket(CLOUD_STORAGE_BUCKET_HIPS2FITS)
+    bucket = gcs.bucket(CLOUD_STORAGE_CIT_SCI_PUBLIC)
+
+    already_logged = False
 
     for cutout in cutouts:
+        if already_logged == False:
+            logger.log_text(cutout)
+            already_logged = True
         destination_filename = cutout.replace("/tmp/", "")
         blob = bucket.blob(destination_filename)
         
         blob.upload_from_filename(cutout)
         urls.append(blob.public_url)
+
+    logger.log_text("finished uploading thread #" + i)
 
     return
         
@@ -189,10 +205,6 @@ def download_zip(bucket_name, filename, file = None):
             # response.messages.append("Removing file : " + unzipped_cutouts_dir + "/" + f_file)
             os.remove(unzipped_cutouts_dir + "/" + f_file)
         time_mark(debug, "Truncating finished...")
-
-    # logger.log_text("rosas - about to log the " + unzipped_cutouts_dir + "/* directory contents")
-    # rosas_test = str(glob.glob(unzipped_cutouts_dir + "/*"))
-    # logger.log_text(rosas_test)
 
     # Now, limit the files sent to image files
     time_mark(debug, "Start of grabbing all the cutouts for return...")
@@ -264,10 +276,8 @@ def validate_project_metadata(email, vendor_project_id, vendor_batch_id = None):
             batchId = create_new_batch(project_id, vendor_batch_id)
 
             if(batchId > 0):
-                # db.dispose()
                 return True
             else:
-                # db.dispose()
                 return False
         else:
             validator.error = True
@@ -506,16 +516,7 @@ def lookup_meta_record(sourceId, sourceIdType):
                 conn.close()
 
     except Exception as e:
-        # If something goes wrong, handle the error in this section. This might
-        # involve retrying or adjusting parameters depending on the situation.
-
-        # TO-DO: Add logger
-        # logger.exception(e)
         print(e)
-        # return Response(
-        #     status=500,
-        #     response="An error occurred while reading from the citizen_science_owners table."
-        # )
         return e
    
     # return ownerId.lastrowid
@@ -561,16 +562,9 @@ def insert_lookup_record(metaRecordId, projectId):
             conn.close()
             
     except Exception as e:
-        # If something goes wrong, handle the error in this section. This might
-        # involve retrying or adjusting parameters depending on the situation.
-
-        # TO-DO: Add logger
         logger.exception(e.__str__())
         return False
-        # return Response(
-        #     status=500,
-        #     response="An error occurred while creating a citizen_science_meta record."
-        # )
+        
     return True
 
 def locate(pattern, root_path):

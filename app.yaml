@@ -28,7 +28,7 @@ manual_scaling:
   instances: 1
 resources:
   cpu: 4
-  memory_gb: 12
+  memory_gb: 10
   disk_size_gb: 20
 env_variables:
   S3_ENDPOINT_URL: https://storage.googleapis.com
@@ -41,3 +41,4 @@ env_variables:
   DB_HOST: 10.109.176.5
   DB_PORT: 5432
   CLOUD_STORAGE_BUCKET_HIPS2FITS: citizen-science-data
+  CLOUD_STORAGE_CIT_SCI_PUBLIC: citizen-science-data-public
