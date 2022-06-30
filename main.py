@@ -156,8 +156,10 @@ def upload_cutout_arr(cutouts, i):
     return
         
 def insert_meta_records(urls, vendor_project_id):
+    time_mark(debug, "Start of metadata record insertion")
     for url in urls:
         insert_meta_record(url, str(round(time.time() * 1000)) , 'sourceId', vendor_project_id)
+    time_mark(debug, "End of metadata record insertion")
     return
 
 # Accepts the bucket name and filename to download and returns the path of the downloaded file
