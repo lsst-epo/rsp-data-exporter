@@ -1,3 +1,3 @@
 from .data_exporter_response import DataExporterResponse
 from .citizen_science_validator import CitizenScienceValidator
-import main
+import src.main as main

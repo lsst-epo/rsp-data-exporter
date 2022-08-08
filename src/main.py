@@ -7,12 +7,13 @@ from google.cloud import storage
 import panoptes_client
 from panoptes_client import Panoptes, Project, SubjectSet
 import sqlalchemy
-from pprint import pprint
+from sqlalchemy import select, update
 import numpy as np
 import threading
 # Imports the Cloud Logging client library
 from google.cloud import logging
 # import lsst.daf.butler as dafButler
+from models.citizen_science_batches import CitizenScienceBatches
 
 app = Flask(__name__)
 
@@ -320,18 +321,19 @@ def butler_retrieve_data_and_upload():
     return manifest_url
         
 def create_new_batch(project_id, vendor_batch_id):
-    global db, validator, reponse, debug
+    global validator, response, debug
     time_mark(debug, "Start of create new batch")
-    stmt = sqlalchemy.text(
-        "INSERT INTO citizen_science_batches (cit_sci_proj_id, batch_status, vendor_batch_id)"
-        "VALUES (:projectId, 'ACTIVE', :vendorBatchId) RETURNING cit_sci_batch_id"
-    )
+    batchId = -1;
     try:
-        batchId = -1;
-        with db.connect() as conn:
-            for row in conn.execute(stmt, projectId=project_id, vendorBatchId=vendor_batch_id):
-                batchId = row['cit_sci_batch_id']
-            conn.close()
+        db = CitizenScienceBatches.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        citizen_science_batch_record = CitizenScienceBatches(cit_sci_proj_id=project_id, vendor_batch_id=vendor_batch_id, batch_status='ACTIVE')    
+        db.add(citizen_science_batch_record)
+        db.commit()
+        logger.log_text("about to log db")
+        logger.log_text(dir(db))
+        logger.log_text("about to log db.cit_sci_batch_id")
+        logger.log_text(db.cit_sci_batch_id)
+        batchId = db.cit_sci_batch_id
     except Exception as e:
         logger.log_text(e)
         validator.error = True
@@ -346,17 +348,18 @@ def check_batch_status(project_id, vendor_project_id):
     time_mark(debug, "Start of check batch status")
     batch_id = -1
     vendor_batch_id_db = 0
-    stmt = sqlalchemy.text(
-        "SELECT * FROM citizen_science_batches WHERE cit_sci_proj_id = :projectId AND batch_status = 'ACTIVE'"
-    )
     try:
-        with db.connect() as conn:
-            records = conn.execute(stmt, projectId=project_id)
-            if(records.rowcount > 0):
-                record = records.first()
-                batch_id = record['cit_sci_batch_id']
-                vendor_batch_id_db = record['vendor_batch_id']
-            conn.close()
+        db = CitizenScienceBatches.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        stmt = select(CitizenScienceBatches).where(CitizenScienceBatches.cit_sci_proj_id == project_id).where(CitizenScienceBatches.batch_status == 'ACTIVE')
+        results = db.execute(stmt)
+        for row in results.scalars():
+            batch_id = row['cit_sci_batch_id']
+            vendor_batch_id_db = row['vendor_batch_id']
+            break
+        logger.log_text("about to log batch_id")
+        logger.log_text(batch_id)
+        logger.log_text("about to log vendor_batch_id_db")
+        logger.log_text(vendor_batch_id_db)
     except Exception as e:
         logger.log_text(e)
         validator.error = True
@@ -378,21 +381,15 @@ def check_batch_status(project_id, vendor_project_id):
                         update_batch_record = False
                         break
         if update_batch_record == True:
-            updt_stmt = sqlalchemy.text(
-                "UPDATE citizen_science_batches SET batch_status = 'COMPLETE' WHERE cit_sci_proj_id = :projectId AND cit_sci_batch_id = :batchId"
-            )
             try:
-                # batch_id = -1
-                with db.connect() as conn:
-                    conn.execute(updt_stmt, projectId=project_id, batchId=batch_id)
-                    conn.close()
-                
+                logger.log_text("about to update batch in batch_id > 0 IF code block")
+                updt_stmt = update(CitizenScienceBatches).values(batch_status = "COMPLETE").where(CitizenScienceBatches.cit_sci_proj_id == project_id).where(CitizenScienceBatches.cit_sci_batch_id == batch_id)
+                db.execute(updt_stmt)
             except Exception as e:
                 logger.log_text(e)
                 validator.error = True
                 response.status = "error"
                 response.messages.append("An error occurred while attempting to create a new data batch record for you - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
-            # return batch_id # no active batches
     
     return batch_id
 
