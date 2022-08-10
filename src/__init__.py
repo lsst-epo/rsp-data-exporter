@@ -1,3 +1,5 @@
 from .data_exporter_response import DataExporterResponse
 from .citizen_science_validator import CitizenScienceValidator
+from .models.citizen_science_batches import CitizenScienceBatches
+from .models.citizen_science_projects import CitizenScienceProjects
 import src.main as main

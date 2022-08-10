@@ -14,6 +14,7 @@ import threading
 from google.cloud import logging
 # import lsst.daf.butler as dafButler
 from models.citizen_science_batches import CitizenScienceBatches
+from models.citizen_science_projects import CitizenScienceProjects
 
 app = Flask(__name__)
 
@@ -26,6 +27,7 @@ DB_NAME = os.environ['DB_NAME']
 DB_HOST = os.environ['DB_HOST']
 DB_PORT = os.environ['DB_PORT']
 db = None
+CLOSED_PROJECT_STATUSES = ["COMPLETE", "CANCELLED", "ABANDONED"]
 
 # Instantiates the logging client
 logging_client = logging.Client()
@@ -329,11 +331,11 @@ def create_new_batch(project_id, vendor_batch_id):
         citizen_science_batch_record = CitizenScienceBatches(cit_sci_proj_id=project_id, vendor_batch_id=vendor_batch_id, batch_status='ACTIVE')    
         db.add(citizen_science_batch_record)
         db.commit()
-        logger.log_text("about to log db")
-        logger.log_text(dir(db))
-        logger.log_text("about to log db.cit_sci_batch_id")
-        logger.log_text(db.cit_sci_batch_id)
-        batchId = db.cit_sci_batch_id
+        logger.log_text("about to log citizen_science_batch_record")
+        logger.log_text(dir(citizen_science_batch_record))
+        logger.log_text("about to log citizen_science_batch_record.cit_sci_batch_id")
+        logger.log_text(citizen_science_batch_record.cit_sci_batch_id)
+        batchId = citizen_science_batch_record.cit_sci_batch_id
     except Exception as e:
         logger.log_text(e)
         validator.error = True
@@ -396,18 +398,16 @@ def check_batch_status(project_id, vendor_project_id):
 def create_new_project_record(ownerId, vendorProjectId):
     global db, validator, response, debug
     time_mark(debug, "Start of create new project")
-    stmt = sqlalchemy.text(
-        "INSERT INTO citizen_science_projects (vendor_project_id, owner_id, project_status)"
-        " VALUES (:vendorProjectId, :ownerId, :projectStatus) RETURNING cit_sci_proj_id"
-    )
     project_id = None
     try:
-        # Using a with statement ensures that the connection is always released
-        # back into the pool at the end of statement (even if an error occurs)
-        with db.connect() as conn:
-            for row in conn.execute(stmt, vendorProjectId=vendorProjectId, ownerId=ownerId, projectStatus='active'):
-                project_id = row['cit_sci_proj_id']
-                conn.close()
+        db = CitizenScienceProjects.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        citizen_science_project_record = CitizenScienceBatches(vendor_project_id=vendorProjectId, project_status='ACTIVE')
+        db.add(citizen_science_project_record)
+        db.commit()
+        project_id = citizen_science_project_record.cit_sci_proj_id
+
+        logger.log_text("about to log project_id")
+        logger.log_text(project_id)
 
     except Exception as e:
         validator.error = True
@@ -420,25 +420,22 @@ def lookup_project_record(vendorProjectId):
     global db, response, validator, debug
     time_mark(debug, "Start of lookup project record")
     project_id = None
-    stmt = sqlalchemy.text(
-        "SELECT cit_sci_proj_id, project_status, data_rights_approved FROM citizen_science_projects WHERE vendor_project_id = :vendorProjectId"
-    )
-    project_id = None
+
     try:
-        # Using a with statement ensures that the connection is always released
-        # back into the pool at the end of statement (even if an error occurs)
-        with db.connect() as conn:
-            for row in conn.execute(stmt, vendorProjectId=vendorProjectId):
-                status = row['project_status']
-                validator.data_rights_approved = row["data_rights_approved"]
-                if status == "complete" or status == "cancelled" or status == "abandoned":
-                    response.status = "error"
-                    validator.error = True
-                    response.messages.append("This project is in a status of " + status + " - either create a new project or contact Rubin to request for the project to be reopened.")
-                    # return
-                else:
-                    project_id = row['cit_sci_proj_id']
-        conn.close()
+        db = CitizenScienceProjects.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        stmt = select(CitizenScienceProjects).where(CitizenScienceProjects.vendor_project_id == vendorProjectId)
+
+        results = db.execute(stmt)
+        for row in results.scalars():
+            status = row['project_status']
+            validator.data_rights_approved = row["data_rights_approved"]
+
+            if status in CLOSED_PROJECT_STATUSES:
+                response.status = "error"
+                validator.error = True
+                response.messages.append("This project is in a status of " + status + " - either create a new project or contact Rubin to request for the project to be reopened.")
+            else:
+                project_id = row['cit_sci_proj_id']
 
     except Exception as e:
         validator.error = True
