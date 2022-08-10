@@ -17,6 +17,7 @@ from models.citizen_science_batches import CitizenScienceBatches
 from models.citizen_science_projects import CitizenScienceProjects
 from models.citizen_science_owners import CitizenScienceOwners
 from models.citizen_science_meta import CitizenScienceMeta
+from models.citizen_science_proj_meta_lookup import CitizenScienceProjMetaLookup
 
 app = Flask(__name__)
 
@@ -249,8 +250,7 @@ def build_and_upload_manifest(urls, email, sourceId, bucket, destination_root = 
     return manifestBlob.public_url
 
 def validate_project_metadata(email, vendor_project_id, vendor_batch_id = None):
-    global db, validator, debug, response
-    db = init_connection_engine()
+    global validator, debug, response
     newOwner = False
 
     # Lookup if owner record exists, if so then return it
@@ -349,7 +349,7 @@ def create_new_batch(project_id, vendor_batch_id):
 
 def check_batch_status(project_id, vendor_project_id):
     # First, look up batches in the database, which may 
-    global db, validator, debug
+    global validator, debug
     time_mark(debug, "Start of check batch status")
     batch_id = -1
     vendor_batch_id_db = 0
@@ -399,7 +399,7 @@ def check_batch_status(project_id, vendor_project_id):
     return batch_id
 
 def create_new_project_record(ownerId, vendorProjectId):
-    global db, validator, response, debug
+    global validator, response, debug
     time_mark(debug, "Start of create new project")
     project_id = None
     try:
@@ -420,7 +420,7 @@ def create_new_project_record(ownerId, vendorProjectId):
     return project_id
 
 def lookup_project_record(vendorProjectId):
-    global db, response, validator, debug
+    global response, validator, debug
     time_mark(debug, "Start of lookup project record")
     project_id = None
 
@@ -453,7 +453,7 @@ def lookup_project_record(vendorProjectId):
     return project_id
 
 def create_new_owner_record(email):
-    global db, validator, response, debug
+    global validator, response, debug
     time_mark(debug, "Start of create new owner")
 
     owner_id = None;
@@ -473,7 +473,7 @@ def create_new_owner_record(email):
     return owner_id
 
 def lookup_owner_record(emailP):
-    global db, validator, response, debug
+    global validator, response, debug
     time_mark(debug, "Looking up owner record")
     # stmt = sqlalchemy.text(
     #     "SELECT cit_sci_owner_id, status FROM citizen_science_owners WHERE email=:email"
@@ -505,8 +505,6 @@ def lookup_owner_record(emailP):
     return ownerId
 
 def lookup_meta_record(sourceId, sourceIdType):
-    global db
-
     try:
         db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
         stmt = select(CitizenScienceMeta).where(CitizenScienceProjects.source_id == sourceId).where(CitizenScienceProjects.source_id_type == sourceIdType)
@@ -524,7 +522,7 @@ def lookup_meta_record(sourceId, sourceIdType):
     return metaId
 
 def insert_meta_record(uri, sourceId, sourceIdType, projectId):
-    global db, debug
+    global debug
 
     # Temp hardcoded variables
     edcVerId = 11000222
@@ -551,17 +549,11 @@ def insert_meta_record(uri, sourceId, sourceIdType, projectId):
     return errorOccurred
 
 def insert_lookup_record(metaRecordId, projectId):
-    global db
-    stmt = sqlalchemy.text(
-        "INSERT INTO citizen_science_proj_meta_lookup (cit_sci_proj_id, cit_sci_meta_id)"
-        " VALUES (:projectId, :metaRecordId)"
-    )
     try:
-        # Using a with statement ensures that the connection is always released
-        # back into the pool at the end of statement (even if an error occurs)
-        with db.connect() as conn:
-            conn.execute(stmt, projectId=projectId, metaRecordId=metaRecordId)
-            conn.close()
+        db = CitizenScienceProjMetaLookup.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        citizen_science_proj_meta_lookup_record = CitizenScienceProjMetaLookup(cit_sci_proj_id=projectId, cit_sci_meta_id=metaRecordId)
+        db.add(citizen_science_proj_meta_lookup_record)
+        db.commit()
             
     except Exception as e:
         logger.exception(e.__str__())

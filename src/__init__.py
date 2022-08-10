@@ -4,4 +4,5 @@ from .models.citizen_science_batches import CitizenScienceBatches
 from .models.citizen_science_projects import CitizenScienceProjects
 from .models.citizen_science_owners import CitizenScienceOwners
 from .models.citizen_science_meta import CitizenScienceMeta
+from .models.citizen_science_proj_meta_lookup import CitizenScienceProjMetaLookup
 import src.main as main
