@@ -16,6 +16,7 @@ from google.cloud import logging
 from models.citizen_science_batches import CitizenScienceBatches
 from models.citizen_science_projects import CitizenScienceProjects
 from models.citizen_science_owners import CitizenScienceOwners
+from models.citizen_science_meta import CitizenScienceMeta
 
 app = Flask(__name__)
 
@@ -505,41 +506,41 @@ def lookup_owner_record(emailP):
 
 def lookup_meta_record(sourceId, sourceIdType):
     global db
-    stmt = sqlalchemy.text(
-        "SELECT cit_sci_meta_id FROM citizen_science_meta WHERE source_id=:sourceId AND source_id_type=:sourceIdType"
-    )
+
     try:
-        # Using a with statement ensures that the connection is always released
-        # back into the pool at the end of statement (even if an error occurs)
-        with db.connect() as conn:
-            for row in conn.execute(stmt, sourceId=sourceId, sourceIdType=sourceIdType):
-                metaId = row['cit_sci_meta_id']
-                conn.close()
+        db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        stmt = select(CitizenScienceMeta).where(CitizenScienceProjects.source_id == sourceId).where(CitizenScienceProjects.source_id_type == sourceIdType)
+        results = db.execute(stmt)
+        for row in results.scalars():
+            metaId = row.cit_sci_meta_id
+
+        logger.log_text("about to log metaId in lookup_meta_record()")
+        logger.log_text(metaId)
 
     except Exception as e:
         print(e)
         return e
    
-    # return ownerId.lastrowid
     return metaId
 
 def insert_meta_record(uri, sourceId, sourceIdType, projectId):
     global db, debug
+
+    # Temp hardcoded variables
     edcVerId = 11000222
     public = True
-    stmt = sqlalchemy.text(
-        "INSERT INTO citizen_science_meta (edc_ver_id, source_id, source_id_type, uri, public)"
-        " VALUES (:edcVerIdSQL, :sourceIdSQL, :sourceIdTypeSQL, :uriSQL, :publicSQL) RETURNING cit_sci_meta_id"
-    )
+
     errorOccurred = False;
     try:
-        # Using a with statement ensures that the connection is always released
-        # back into the pool at the end of statement (even if an error occurs)
-        with db.connect() as conn:
-            for row in conn.execute(stmt, edcVerIdSQL=edcVerId, sourceIdSQL=sourceId, sourceIdTypeSQL=sourceIdType, uriSQL=uri, publicSQL=public):
-                metaRecordId = row['cit_sci_meta_id']
-                errorOccurred = True if insert_lookup_record(metaRecordId, projectId) else False
-            conn.close()
+        db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        citizen_science_meta_record = CitizenScienceMeta(edc_ver_id=edcVerId, source_id=sourceId, source_id_type=sourceIdType, uri=uri, public=public)
+        db.add(citizen_science_meta_record)
+        db.commit()
+        metaRecordId = citizen_science_meta_record.cit_sci_meta_id
+        errorOccurred = True if insert_lookup_record(metaRecordId, projectId) else False
+
+        logger.log_text("about to log metaRecordId")
+        logger.log_text(metaRecordId)
 
     except Exception as e:
         # Is the exception because of a duplicate key error? If so, lookup the ID of the meta record and perform the insert into the lookup table
