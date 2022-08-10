@@ -15,6 +15,7 @@ from google.cloud import logging
 # import lsst.daf.butler as dafButler
 from models.citizen_science_batches import CitizenScienceBatches
 from models.citizen_science_projects import CitizenScienceProjects
+from models.citizen_science_owners import CitizenScienceOwners
 
 app = Flask(__name__)
 
@@ -28,6 +29,7 @@ DB_HOST = os.environ['DB_HOST']
 DB_PORT = os.environ['DB_PORT']
 db = None
 CLOSED_PROJECT_STATUSES = ["COMPLETE", "CANCELLED", "ABANDONED"]
+BAD_OWNER_STATUSES = ["BLOCKED", "DISABLED"]
 
 # Instantiates the logging client
 logging_client = logging.Client()
@@ -437,6 +439,11 @@ def lookup_project_record(vendorProjectId):
             else:
                 project_id = row['cit_sci_proj_id']
 
+        logger.log_text("about to log status in lookup_project_record()")
+        logger.log_text(status)
+        logger.log_text("logging validator.data_rights_approved")
+        logger.log_text(validator.data_rights_approved)
+
     except Exception as e:
         validator.error = True
         response.status = "error"
@@ -447,19 +454,15 @@ def lookup_project_record(vendorProjectId):
 def create_new_owner_record(email):
     global db, validator, response, debug
     time_mark(debug, "Start of create new owner")
-    stmt = sqlalchemy.text(
-        "INSERT INTO citizen_science_owners (email, status)"
-        " VALUES (:email, :status) RETURNING cit_sci_owner_id"
-    )
+
     owner_id = None;
     try:
-        # Using a with statement ensures that the connection is always released
-        # back into the pool at the end of statement (even if an error occurs)
-        with db.connect() as conn:
-            for row in conn.execute(stmt, email=email, status='active'):
-                owner_id = row['cit_sci_owner_id']
-                conn.close()
-                return owner_id
+        db = CitizenScienceOwners.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        citizen_science_owner_record = CitizenScienceOwners(email=email, status='ACTIVE')
+        db.add(citizen_science_owner_record)
+        db.commit()
+        owner_id = citizen_science_owner_record.cit_sci_owner_id
+        # return owner_id
 
     except Exception as e:
         validator.error = True
@@ -471,25 +474,27 @@ def create_new_owner_record(email):
 def lookup_owner_record(emailP):
     global db, validator, response, debug
     time_mark(debug, "Looking up owner record")
-    stmt = sqlalchemy.text(
-        "SELECT cit_sci_owner_id, status FROM citizen_science_owners WHERE email=:email"
-    )
+    # stmt = sqlalchemy.text(
+    #     "SELECT cit_sci_owner_id, status FROM citizen_science_owners WHERE email=:email"
+    # )
     ownerId = None
     status = ""
 
     try:
-        # Using a with statement ensures that the connection is always released
-        # back into the pool at the end of statement (even if an error occurs)
-        with db.connect() as conn:
-            for row in conn.execute(stmt, email=emailP):
-                ownerId = row['cit_sci_owner_id']
-                status = row['status']
-                if status == "blocked" or status == "disabled":
-                    validator.error = True
-                    response.status = "error"
-                    response.messages.append("You are not/no longer eligible to use the Rubin Science Platform to send data to Zooniverse.")
-                conn.close()
-                return ownerId
+        db = CitizenScienceOwners.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        stmt = select(CitizenScienceOwners).where(CitizenScienceOwners.email == emailP)
+
+        results = db.execute(stmt)
+        for row in results.scalars():
+            ownerId = row['cit_sci_owner_id']
+            status = row['status']
+
+            if status in BAD_OWNER_STATUSES:
+                validator.error = True
+                response.status = "error"
+                response.messages.append("You are not/no longer eligible to use the Rubin Science Platform to send data to Zooniverse.")
+
+                # return ownerId
 
     except Exception as e:
         validator.error = True
