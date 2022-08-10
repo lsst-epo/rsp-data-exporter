@@ -7,12 +7,17 @@ from google.cloud import storage
 import panoptes_client
 from panoptes_client import Panoptes, Project, SubjectSet
 import sqlalchemy
-from pprint import pprint
+from sqlalchemy import select, update
 import numpy as np
 import threading
 # Imports the Cloud Logging client library
 from google.cloud import logging
 # import lsst.daf.butler as dafButler
+from models.citizen_science_batches import CitizenScienceBatches
+from models.citizen_science_projects import CitizenScienceProjects
+from models.citizen_science_owners import CitizenScienceOwners
+from models.citizen_science_meta import CitizenScienceMeta
+from models.citizen_science_proj_meta_lookup import CitizenScienceProjMetaLookup
 
 app = Flask(__name__)
 
@@ -25,6 +30,8 @@ DB_NAME = os.environ['DB_NAME']
 DB_HOST = os.environ['DB_HOST']
 DB_PORT = os.environ['DB_PORT']
 db = None
+CLOSED_PROJECT_STATUSES = ["COMPLETE", "CANCELLED", "ABANDONED"]
+BAD_OWNER_STATUSES = ["BLOCKED", "DISABLED"]
 
 # Instantiates the logging client
 logging_client = logging.Client()
@@ -243,8 +250,7 @@ def build_and_upload_manifest(urls, email, sourceId, bucket, destination_root = 
     return manifestBlob.public_url
 
 def validate_project_metadata(email, vendor_project_id, vendor_batch_id = None):
-    global db, validator, debug, response
-    db = init_connection_engine()
+    global validator, debug, response
     newOwner = False
 
     # Lookup if owner record exists, if so then return it
@@ -320,18 +326,19 @@ def butler_retrieve_data_and_upload():
     return manifest_url
         
 def create_new_batch(project_id, vendor_batch_id):
-    global db, validator, reponse, debug
+    global validator, response, debug
     time_mark(debug, "Start of create new batch")
-    stmt = sqlalchemy.text(
-        "INSERT INTO citizen_science_batches (cit_sci_proj_id, batch_status, vendor_batch_id)"
-        "VALUES (:projectId, 'ACTIVE', :vendorBatchId) RETURNING cit_sci_batch_id"
-    )
+    batchId = -1;
     try:
-        batchId = -1;
-        with db.connect() as conn:
-            for row in conn.execute(stmt, projectId=project_id, vendorBatchId=vendor_batch_id):
-                batchId = row['cit_sci_batch_id']
-            conn.close()
+        db = CitizenScienceBatches.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        citizen_science_batch_record = CitizenScienceBatches(cit_sci_proj_id=project_id, vendor_batch_id=vendor_batch_id, batch_status='ACTIVE')    
+        db.add(citizen_science_batch_record)
+        db.commit()
+        logger.log_text("about to log citizen_science_batch_record")
+        logger.log_text(dir(citizen_science_batch_record))
+        logger.log_text("about to log citizen_science_batch_record.cit_sci_batch_id")
+        logger.log_text(citizen_science_batch_record.cit_sci_batch_id)
+        batchId = citizen_science_batch_record.cit_sci_batch_id
     except Exception as e:
         logger.log_text(e)
         validator.error = True
@@ -342,21 +349,22 @@ def create_new_batch(project_id, vendor_batch_id):
 
 def check_batch_status(project_id, vendor_project_id):
     # First, look up batches in the database, which may 
-    global db, validator, debug
+    global validator, debug
     time_mark(debug, "Start of check batch status")
     batch_id = -1
     vendor_batch_id_db = 0
-    stmt = sqlalchemy.text(
-        "SELECT * FROM citizen_science_batches WHERE cit_sci_proj_id = :projectId AND batch_status = 'ACTIVE'"
-    )
     try:
-        with db.connect() as conn:
-            records = conn.execute(stmt, projectId=project_id)
-            if(records.rowcount > 0):
-                record = records.first()
-                batch_id = record['cit_sci_batch_id']
-                vendor_batch_id_db = record['vendor_batch_id']
-            conn.close()
+        db = CitizenScienceBatches.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        stmt = select(CitizenScienceBatches).where(CitizenScienceBatches.cit_sci_proj_id == project_id).where(CitizenScienceBatches.batch_status == 'ACTIVE')
+        results = db.execute(stmt)
+        for row in results.scalars():
+            batch_id = row['cit_sci_batch_id']
+            vendor_batch_id_db = row['vendor_batch_id']
+            break
+        logger.log_text("about to log batch_id")
+        logger.log_text(batch_id)
+        logger.log_text("about to log vendor_batch_id_db")
+        logger.log_text(vendor_batch_id_db)
     except Exception as e:
         logger.log_text(e)
         validator.error = True
@@ -378,39 +386,31 @@ def check_batch_status(project_id, vendor_project_id):
                         update_batch_record = False
                         break
         if update_batch_record == True:
-            updt_stmt = sqlalchemy.text(
-                "UPDATE citizen_science_batches SET batch_status = 'COMPLETE' WHERE cit_sci_proj_id = :projectId AND cit_sci_batch_id = :batchId"
-            )
             try:
-                # batch_id = -1
-                with db.connect() as conn:
-                    conn.execute(updt_stmt, projectId=project_id, batchId=batch_id)
-                    conn.close()
-                
+                logger.log_text("about to update batch in batch_id > 0 IF code block")
+                updt_stmt = update(CitizenScienceBatches).values(batch_status = "COMPLETE").where(CitizenScienceBatches.cit_sci_proj_id == project_id).where(CitizenScienceBatches.cit_sci_batch_id == batch_id)
+                db.execute(updt_stmt)
             except Exception as e:
                 logger.log_text(e)
                 validator.error = True
                 response.status = "error"
                 response.messages.append("An error occurred while attempting to create a new data batch record for you - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
-            # return batch_id # no active batches
     
     return batch_id
 
 def create_new_project_record(ownerId, vendorProjectId):
-    global db, validator, response, debug
+    global validator, response, debug
     time_mark(debug, "Start of create new project")
-    stmt = sqlalchemy.text(
-        "INSERT INTO citizen_science_projects (vendor_project_id, owner_id, project_status)"
-        " VALUES (:vendorProjectId, :ownerId, :projectStatus) RETURNING cit_sci_proj_id"
-    )
     project_id = None
     try:
-        # Using a with statement ensures that the connection is always released
-        # back into the pool at the end of statement (even if an error occurs)
-        with db.connect() as conn:
-            for row in conn.execute(stmt, vendorProjectId=vendorProjectId, ownerId=ownerId, projectStatus='active'):
-                project_id = row['cit_sci_proj_id']
-                conn.close()
+        db = CitizenScienceProjects.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        citizen_science_project_record = CitizenScienceBatches(vendor_project_id=vendorProjectId, project_status='ACTIVE')
+        db.add(citizen_science_project_record)
+        db.commit()
+        project_id = citizen_science_project_record.cit_sci_proj_id
+
+        logger.log_text("about to log project_id")
+        logger.log_text(project_id)
 
     except Exception as e:
         validator.error = True
@@ -420,28 +420,30 @@ def create_new_project_record(ownerId, vendorProjectId):
     return project_id
 
 def lookup_project_record(vendorProjectId):
-    global db, response, validator, debug
+    global response, validator, debug
     time_mark(debug, "Start of lookup project record")
     project_id = None
-    stmt = sqlalchemy.text(
-        "SELECT cit_sci_proj_id, project_status, data_rights_approved FROM citizen_science_projects WHERE vendor_project_id = :vendorProjectId"
-    )
-    project_id = None
+
     try:
-        # Using a with statement ensures that the connection is always released
-        # back into the pool at the end of statement (even if an error occurs)
-        with db.connect() as conn:
-            for row in conn.execute(stmt, vendorProjectId=vendorProjectId):
-                status = row['project_status']
-                validator.data_rights_approved = row["data_rights_approved"]
-                if status == "complete" or status == "cancelled" or status == "abandoned":
-                    response.status = "error"
-                    validator.error = True
-                    response.messages.append("This project is in a status of " + status + " - either create a new project or contact Rubin to request for the project to be reopened.")
-                    # return
-                else:
-                    project_id = row['cit_sci_proj_id']
-        conn.close()
+        db = CitizenScienceProjects.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        stmt = select(CitizenScienceProjects).where(CitizenScienceProjects.vendor_project_id == vendorProjectId)
+
+        results = db.execute(stmt)
+        for row in results.scalars():
+            status = row['project_status']
+            validator.data_rights_approved = row["data_rights_approved"]
+
+            if status in CLOSED_PROJECT_STATUSES:
+                response.status = "error"
+                validator.error = True
+                response.messages.append("This project is in a status of " + status + " - either create a new project or contact Rubin to request for the project to be reopened.")
+            else:
+                project_id = row['cit_sci_proj_id']
+
+        logger.log_text("about to log status in lookup_project_record()")
+        logger.log_text(status)
+        logger.log_text("logging validator.data_rights_approved")
+        logger.log_text(validator.data_rights_approved)
 
     except Exception as e:
         validator.error = True
@@ -451,21 +453,17 @@ def lookup_project_record(vendorProjectId):
     return project_id
 
 def create_new_owner_record(email):
-    global db, validator, response, debug
+    global validator, response, debug
     time_mark(debug, "Start of create new owner")
-    stmt = sqlalchemy.text(
-        "INSERT INTO citizen_science_owners (email, status)"
-        " VALUES (:email, :status) RETURNING cit_sci_owner_id"
-    )
+
     owner_id = None;
     try:
-        # Using a with statement ensures that the connection is always released
-        # back into the pool at the end of statement (even if an error occurs)
-        with db.connect() as conn:
-            for row in conn.execute(stmt, email=email, status='active'):
-                owner_id = row['cit_sci_owner_id']
-                conn.close()
-                return owner_id
+        db = CitizenScienceOwners.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        citizen_science_owner_record = CitizenScienceOwners(email=email, status='ACTIVE')
+        db.add(citizen_science_owner_record)
+        db.commit()
+        owner_id = citizen_science_owner_record.cit_sci_owner_id
+        # return owner_id
 
     except Exception as e:
         validator.error = True
@@ -475,27 +473,29 @@ def create_new_owner_record(email):
     return owner_id
 
 def lookup_owner_record(emailP):
-    global db, validator, response, debug
+    global validator, response, debug
     time_mark(debug, "Looking up owner record")
-    stmt = sqlalchemy.text(
-        "SELECT cit_sci_owner_id, status FROM citizen_science_owners WHERE email=:email"
-    )
+    # stmt = sqlalchemy.text(
+    #     "SELECT cit_sci_owner_id, status FROM citizen_science_owners WHERE email=:email"
+    # )
     ownerId = None
     status = ""
 
     try:
-        # Using a with statement ensures that the connection is always released
-        # back into the pool at the end of statement (even if an error occurs)
-        with db.connect() as conn:
-            for row in conn.execute(stmt, email=emailP):
-                ownerId = row['cit_sci_owner_id']
-                status = row['status']
-                if status == "blocked" or status == "disabled":
-                    validator.error = True
-                    response.status = "error"
-                    response.messages.append("You are not/no longer eligible to use the Rubin Science Platform to send data to Zooniverse.")
-                conn.close()
-                return ownerId
+        db = CitizenScienceOwners.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        stmt = select(CitizenScienceOwners).where(CitizenScienceOwners.email == emailP)
+
+        results = db.execute(stmt)
+        for row in results.scalars():
+            ownerId = row['cit_sci_owner_id']
+            status = row['status']
+
+            if status in BAD_OWNER_STATUSES:
+                validator.error = True
+                response.status = "error"
+                response.messages.append("You are not/no longer eligible to use the Rubin Science Platform to send data to Zooniverse.")
+
+                # return ownerId
 
     except Exception as e:
         validator.error = True
@@ -505,42 +505,40 @@ def lookup_owner_record(emailP):
     return ownerId
 
 def lookup_meta_record(sourceId, sourceIdType):
-    global db
-    stmt = sqlalchemy.text(
-        "SELECT cit_sci_meta_id FROM citizen_science_meta WHERE source_id=:sourceId AND source_id_type=:sourceIdType"
-    )
     try:
-        # Using a with statement ensures that the connection is always released
-        # back into the pool at the end of statement (even if an error occurs)
-        with db.connect() as conn:
-            for row in conn.execute(stmt, sourceId=sourceId, sourceIdType=sourceIdType):
-                metaId = row['cit_sci_meta_id']
-                conn.close()
+        db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        stmt = select(CitizenScienceMeta).where(CitizenScienceProjects.source_id == sourceId).where(CitizenScienceProjects.source_id_type == sourceIdType)
+        results = db.execute(stmt)
+        for row in results.scalars():
+            metaId = row.cit_sci_meta_id
+
+        logger.log_text("about to log metaId in lookup_meta_record()")
+        logger.log_text(metaId)
 
     except Exception as e:
         print(e)
         return e
    
-    # return ownerId.lastrowid
     return metaId
 
 def insert_meta_record(uri, sourceId, sourceIdType, projectId):
-    global db, debug
+    global debug
+
+    # Temp hardcoded variables
     edcVerId = 11000222
     public = True
-    stmt = sqlalchemy.text(
-        "INSERT INTO citizen_science_meta (edc_ver_id, source_id, source_id_type, uri, public)"
-        " VALUES (:edcVerIdSQL, :sourceIdSQL, :sourceIdTypeSQL, :uriSQL, :publicSQL) RETURNING cit_sci_meta_id"
-    )
+
     errorOccurred = False;
     try:
-        # Using a with statement ensures that the connection is always released
-        # back into the pool at the end of statement (even if an error occurs)
-        with db.connect() as conn:
-            for row in conn.execute(stmt, edcVerIdSQL=edcVerId, sourceIdSQL=sourceId, sourceIdTypeSQL=sourceIdType, uriSQL=uri, publicSQL=public):
-                metaRecordId = row['cit_sci_meta_id']
-                errorOccurred = True if insert_lookup_record(metaRecordId, projectId) else False
-            conn.close()
+        db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        citizen_science_meta_record = CitizenScienceMeta(edc_ver_id=edcVerId, source_id=sourceId, source_id_type=sourceIdType, uri=uri, public=public)
+        db.add(citizen_science_meta_record)
+        db.commit()
+        metaRecordId = citizen_science_meta_record.cit_sci_meta_id
+        errorOccurred = True if insert_lookup_record(metaRecordId, projectId) else False
+
+        logger.log_text("about to log metaRecordId")
+        logger.log_text(metaRecordId)
 
     except Exception as e:
         # Is the exception because of a duplicate key error? If so, lookup the ID of the meta record and perform the insert into the lookup table
@@ -551,17 +549,11 @@ def insert_meta_record(uri, sourceId, sourceIdType, projectId):
     return errorOccurred
 
 def insert_lookup_record(metaRecordId, projectId):
-    global db
-    stmt = sqlalchemy.text(
-        "INSERT INTO citizen_science_proj_meta_lookup (cit_sci_proj_id, cit_sci_meta_id)"
-        " VALUES (:projectId, :metaRecordId)"
-    )
     try:
-        # Using a with statement ensures that the connection is always released
-        # back into the pool at the end of statement (even if an error occurs)
-        with db.connect() as conn:
-            conn.execute(stmt, projectId=projectId, metaRecordId=metaRecordId)
-            conn.close()
+        db = CitizenScienceProjMetaLookup.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        citizen_science_proj_meta_lookup_record = CitizenScienceProjMetaLookup(cit_sci_proj_id=projectId, cit_sci_meta_id=metaRecordId)
+        db.add(citizen_science_proj_meta_lookup_record)
+        db.commit()
             
     except Exception as e:
         logger.exception(e.__str__())
