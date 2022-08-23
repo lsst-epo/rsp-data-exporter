@@ -12,7 +12,7 @@ import numpy as np
 import threading
 # Imports the Cloud Logging client library
 from google.cloud import logging
-# import lsst.daf.butler as dafButler
+import lsst.daf.butler as dafButler
 from models.citizen_science_batches import CitizenScienceBatches
 from models.citizen_science_projects import CitizenScienceProjects
 from models.citizen_science_owners import CitizenScienceOwners
@@ -41,6 +41,36 @@ response = DataExporterResponse()
 validator = CitizenScienceValidator()
 debug = False
 urls = []
+
+@app.route("/citizen-science-butler-test")
+def new_butler_test():
+    # email = "erosas@lsst.org" # Add your primary email
+    logger.log_text("got into /citizen-science-butler-test!")
+    datasetId = "u/erosas@lsst.org/zooniverse-test" # Replace "change-this" with a unique name of your change, leave the leading slash '/'
+    repo = 's3://butler-config' # Keep track of this URI for later use with: butler retrieve-artifacts...
+    collection = "2.2i/runs/DP0.1"
+    logger.log_text("about to set up the butler")
+    butler = dafButler.Butler(repo, collections=collection, run=datasetId)
+    logger.log_text("about to log butler object:")
+    logger.log_text(str(butler.__dict__))
+    registry = butler.registry
+    logger.log_text("about to log registry object:")
+    logger.log_text(str(registry.__dict__))
+    logger.log_text("about to queryDatasets()")
+    refs = registry.queryDatasets(datasetType="calexp", collections=collection)
+    logger.log_text("about to loop through refs and call retrieveArtifacts for only the first ref")
+    transferred = butler.retrieveArtifacts(refs, destination='gs://butler-config/data/')
+
+    # for i, ref in enumerate(refs):
+    #     logger.log_text("processing...:")
+    #     logger.log_text(str(ref))
+    #     transferred = butler.retrieveArtifacts(ref, destination='gs://butler-config/data/')
+    #     break
+    
+    logger.log_text("done retrieving artifacts!")
+    logger.log_text("about to log transferred object")
+    logger.log_text(str(transferred.__dict))
+    return json.dumps(transferred)
 
 @app.route("/citizen-science-ingest-status")
 def check_status_of_previously_executed_ingest():
@@ -303,7 +333,7 @@ def butler_retrieve_data_and_upload():
     collection = request.args.get('collection')
     source_id = request.args.get("sourceId")
     vendor_project_id = request.args.get("vendorProjectId")
-    output = subprocess.run(['sh', '/opt/lsst/software/server/run.sh', email, collection], stdout=subprocess.PIPE).stdout.decode('utf-8')
+    # output = subprocess.run(['sh', '/opt/lsst/software/server/run.sh', email, collection], stdout=subprocess.PIPE).stdout.decode('utf-8')
 
     # Create a Cloud Storage client.
     gcs = storage.Client()

@@ -2,6 +2,8 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean
 import sqlalchemy
 
+Base = declarative_base()
+
 class CitizenScienceOwners(Base):
     __tablename__ = 'citizen_science_owners'
 

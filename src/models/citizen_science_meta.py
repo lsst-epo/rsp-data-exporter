@@ -2,6 +2,8 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, BigInteger
 import sqlalchemy
 
+Base = declarative_base()
+
 class CitizenScienceMeta(Base):
     __tablename__ = 'citizen_science_meta'
 
