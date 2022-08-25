@@ -105,8 +105,8 @@ def download_bucket_data_and_process():
     email = request.args.get("email")
     vendor_project_id = request.args.get("vendor_project_id")
     vendor_batch_id = request.args.get("vendor_batch_id")
+    data_type = request.args.get("data_type")
     debug = bool(request.args.get("debug"))
-    # large_import = bool(request.args.get("large_import"))
     response = DataExporterResponse()
     response.messages = []
     validator = CitizenScienceValidator()
@@ -114,20 +114,33 @@ def download_bucket_data_and_process():
 
     time_mark(debug, __name__)
     
-    validate_project_metadata(email, vendor_project_id, vendor_batch_id)
+    # validate_project_metadata(email, vendor_project_id, vendor_batch_id) # temporarily commented out while the tabular data transfer is tested
 
-    if validator.error is False:
-        cutouts = download_zip(CLOUD_STORAGE_BUCKET_HIPS2FITS, guid + ".zip", guid)
+    if data_type != None:
+        logger.log_text("logging data_type: " + data_type)
+    else:
+        logger.log_test("data_type is None")
     
-        if validator.error is False:
-            urls = upload_cutouts(cutouts, vendor_project_id)
+    if validator.error is False:
+        if data_type != None and data_type == "TABULAR_DATA":
+            csv_path = download_zip(CLOUD_STORAGE_BUCKET_HIPS2FITS , guid + ".zip", guid, data_type)[0]
+            # to-do: Upload CSV?
+            url = upload_csv(csv_path)
+            create_csv_records(csv_path, url)
 
+        else: 
+            # astro cutouts data
+            cutouts = download_zip(CLOUD_STORAGE_BUCKET_HIPS2FITS, guid + ".zip", guid)
+    
             if validator.error is False:
-            
-                manifest_url = build_and_upload_manifest(urls, email, "556677", CLOUD_STORAGE_CIT_SCI_PUBLIC, guid + "/")
-            
-                response.status = "success"
-                response.manifest_url = manifest_url
+                urls = upload_cutouts(cutouts, vendor_project_id)
+
+                if validator.error is False:
+                
+                    manifest_url = build_and_upload_manifest(urls, email, "556677", CLOUD_STORAGE_CIT_SCI_PUBLIC, guid + "/")
+                
+                    response.status = "success"
+                    response.manifest_url = manifest_url
     else:
         response.status = "error"
         if response.messages == None or len(response.messages) == 0:
@@ -137,6 +150,27 @@ def download_bucket_data_and_process():
     # logger.log_text(res)
     time_mark(debug, "Done processing, return response to notebook aspect")
     return res
+
+def upload_csv(csv_path):
+    logger.log_text("inside of upload_csv")
+    gcs = storage.Client()
+    bucket = gcs.bucket(CLOUD_STORAGE_CIT_SCI_PUBLIC)
+    destination_filename = csv_path.replace("/tmp/", "")
+    blob = bucket.blob(destination_filename)
+    blob.upload_from_filename(csv_path)
+
+    logger.log_text("logging blob.public_url:")
+    logger.log_text(blob.public_url)
+    return blob.public_url
+
+def create_csv_records(csv_path, csv_url):
+    csv_file = open(csv_path, "rU")
+    reader = csv.reader(csv_file, delimiter=',')
+    logger.log_text("about to loop CSV file contents in upload_csv")
+    line_count = 0 # relevant to data rights approval limits, and zooniverse business rules for transfer thresholds
+    for row in reader:
+        logger.log_text(str(row))
+    return
 
 # Note: plural
 def upload_cutouts(cutouts, vendor_project_id):
@@ -200,7 +234,7 @@ def insert_meta_records(urls, vendor_project_id):
     return
 
 # Accepts the bucket name and filename to download and returns the path of the downloaded file
-def download_zip(bucket_name, filename, file = None):
+def download_zip(bucket_name, filename, file = None, data_type = None):
     global response, validator, db, debug
     time_mark(debug, "Start of download zip")
     # Create a Cloud Storage client.
@@ -216,13 +250,16 @@ def download_zip(bucket_name, filename, file = None):
     blob.download_to_filename(zipped_cutouts)
     time_mark(debug, "Download finished...")
 
-    # logger.log_text("rosas - about to log the /tmp directory contents")
-    # rosas_test = str(glob.glob("/tmp/*"))
-    # logger.log_text(rosas_test)
+
 
     unzipped_cutouts_dir = "/tmp/" + file
     os.mkdir(unzipped_cutouts_dir)
     time_mark(debug, "Start of unzip....")
+    logger.log_text("rosas - about to log the /tmp directory contents")
+    rosas_test = str(glob.glob("/tmp/*"))
+    logger.log_text(rosas_test)
+
+
     shutil.unpack_archive(zipped_cutouts, unzipped_cutouts_dir, "zip")
     time_mark(debug, "Unzip finished...")
 
@@ -231,28 +268,43 @@ def download_zip(bucket_name, filename, file = None):
     time_mark(debug, "Start of dir count...")
     files = os.listdir(unzipped_cutouts_dir)
     time_mark(debug, "Dir count finished...")
+
     max_objects_count = 100
     if validator.data_rights_approved == True:
         max_objects_count = 10000
     else:
         response.messages.append("Your project has not been approved by the data rights panel as of yet, as such you will not be able to send any additional data to Zooniverse until your project is approved.")
 
-    if len(files) > max_objects_count:
-        response.messages.append("Currently, a maximum of " + str(max_objects_count) + " objects is allowed per batch for your project - your batch has been has been truncated and anything in excess of " + str(max_objects_count) + " objects has been removed.")
-        time_mark(debug, "Start of truncating excess files")
-        for f_file in files[max_objects_count:]:
-            # response.messages.append("Removing file : " + unzipped_cutouts_dir + "/" + f_file)
-            os.remove(unzipped_cutouts_dir + "/" + f_file)
-        time_mark(debug, "Truncating finished...")
+    # Deviate logic based on data type
+    if data_type != None and data_type == "TABULAR_DATA":
+        csv_path = unzipped_cutouts_dir + "/" + files[0]
+        logger.log_text("inside of TABULAR_DATA code block")
+        # Get CSV file
+        csv_file = open(csv_path, "rU")
+        reader = csv.reader(csv_file, delimiter=',')
+        logger.log_text("about to log CSV file contents")
+        for row in reader:
+            logger.log_text(str(row))
+        logger.log_text("done logging CSV file contents")
+        return [csv_path]
+    else:
+        logger.log_text("Data is NOT in tabular format")
+        if len(files) > max_objects_count:
+            response.messages.append("Currently, a maximum of " + str(max_objects_count) + " objects is allowed per batch for your project - your batch has been has been truncated and anything in excess of " + str(max_objects_count) + " objects has been removed.")
+            time_mark(debug, "Start of truncating excess files")
+            for f_file in files[max_objects_count:]:
+                # response.messages.append("Removing file : " + unzipped_cutouts_dir + "/" + f_file)
+                os.remove(unzipped_cutouts_dir + "/" + f_file)
+            time_mark(debug, "Truncating finished...")
 
-    # Now, limit the files sent to image files
-    time_mark(debug, "Start of grabbing all the cutouts for return...")
-    pngs = glob.glob("/tmp/" + file + "/*.png")
-    jpegs = glob.glob("/tmp/" + file + "/*.jpeg")
-    jpgs = glob.glob("/tmp/" + file + "/*.jpg")
-    cutouts = pngs + jpegs + jpgs
-    time_mark(debug, "Grabbing cutouts finished...")
-    return cutouts
+        # Now, limit the files sent to image files
+        time_mark(debug, "Start of grabbing all the cutouts for return...")
+        pngs = glob.glob("/tmp/" + file + "/*.png")
+        jpegs = glob.glob("/tmp/" + file + "/*.jpeg")
+        jpgs = glob.glob("/tmp/" + file + "/*.jpg")
+        cutouts = pngs + jpegs + jpgs
+        time_mark(debug, "Grabbing cutouts finished...")
+        return cutouts
 
 def build_and_upload_manifest(urls, email, sourceId, bucket, destination_root = ""):
     global debug
