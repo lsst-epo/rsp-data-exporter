@@ -1,7 +1,8 @@
 import os, fnmatch, json, subprocess, csv, shutil, time
-import glob # for debugging
-from citizen_science_validator import CitizenScienceValidator
-from data_exporter_response import DataExporterResponse
+import glob
+from tokenize import tabsize # for debugging
+from models.citizen_science.citizen_science_validator import CitizenScienceValidator
+from models.data_exporter_response import DataExporterResponse
 from flask import Flask, request, Response
 from google.cloud import storage
 import panoptes_client
@@ -13,11 +14,14 @@ import threading
 # Imports the Cloud Logging client library
 from google.cloud import logging
 import lsst.daf.butler as dafButler
-from models.citizen_science_batches import CitizenScienceBatches
-from models.citizen_science_projects import CitizenScienceProjects
-from models.citizen_science_owners import CitizenScienceOwners
-from models.citizen_science_meta import CitizenScienceMeta
-from models.citizen_science_proj_meta_lookup import CitizenScienceProjMetaLookup
+from models.citizen_science.citizen_science_batches import CitizenScienceBatches
+from models.citizen_science.citizen_science_projects import CitizenScienceProjects
+from models.citizen_science.citizen_science_owners import CitizenScienceOwners
+from models.citizen_science.citizen_science_meta import CitizenScienceMeta
+from models.citizen_science.citizen_science_proj_meta_lookup import CitizenScienceProjMetaLookup
+from models.data_release.data_release_diaobjects import DataReleaseDiaObjects
+from models.data_release.data_release_objects import DataReleaseObjects
+from models.data_release.data_release_forcedsources import DataReleaseForcedSources
 
 app = Flask(__name__)
 
@@ -107,6 +111,7 @@ def download_bucket_data_and_process():
     vendor_batch_id = request.args.get("vendor_batch_id")
     data_type = request.args.get("data_type")
     debug = bool(request.args.get("debug"))
+    data_format = request.args.get("table")
     response = DataExporterResponse()
     response.messages = []
     validator = CitizenScienceValidator()
@@ -114,19 +119,21 @@ def download_bucket_data_and_process():
 
     time_mark(debug, __name__)
     
-    # validate_project_metadata(email, vendor_project_id, vendor_batch_id) # temporarily commented out while the tabular data transfer is tested
+    validate_project_metadata(email, vendor_project_id, vendor_batch_id) # temporarily commented out while the tabular data transfer is tested
 
     if data_type != None:
         logger.log_text("logging data_type: " + data_type)
     else:
-        logger.log_test("data_type is None")
+        logger.log_text("data_type is None")
     
     if validator.error is False:
         if data_type != None and data_type == "TABULAR_DATA":
             csv_path = download_zip(CLOUD_STORAGE_BUCKET_HIPS2FITS , guid + ".zip", guid, data_type)[0]
             # to-do: Upload CSV?
             url = upload_csv(csv_path)
-            create_csv_records(csv_path, url)
+            if data_format == "object":
+                # create_csv_records(csv_path, url)
+                create_dr_object_records(csv_path, url)
 
         else: 
             # astro cutouts data
@@ -163,13 +170,66 @@ def upload_csv(csv_path):
     logger.log_text(blob.public_url)
     return blob.public_url
 
-def create_csv_records(csv_path, csv_url):
+def create_csv_records(csv_path, csv_url, data_type):
     csv_file = open(csv_path, "rU")
     reader = csv.reader(csv_file, delimiter=',')
     logger.log_text("about to loop CSV file contents in upload_csv")
     line_count = 0 # relevant to data rights approval limits, and zooniverse business rules for transfer thresholds
     for row in reader:
         logger.log_text(str(row))
+    return
+
+def create_dr_object_records(csv_path, csv_url):
+    # DataReleaseObjects
+    csv_file = open(csv_path, "rU")
+    reader = csv.DictReader(csv_file)
+    logger.log_text("about to loop CSV file contents in upload_csv")
+    for row in reader:
+        try:
+            db = DataReleaseObjects.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+            data_release_object_record = DataReleaseObjects(objectId=row["objectId"],
+                                                            coord_dec=row["coord_dec"],
+                                                            coord_ra=row["coord_ra"],
+                                                            g_ra=row["g_ra"],
+                                                            i_ra=row["i_ra"],
+                                                            r_ra=row["r_ra"],
+                                                            u_ra=row["u_ra"],
+                                                            y_ra=row["y_ra"],
+                                                            z_ra=row["z_ra"],
+                                                            g_decl=row["g_decl"],
+                                                            i_decl=row["i_decl"],
+                                                            r_decl=row["r_decl"],
+                                                            u_decl=row["u_decl"],
+                                                            y_decl=row["y_decl"],
+                                                            z_decl=row["z_decl"],
+                                                            g_bdFluxB=row["g_bdFluxB"],
+                                                            i_bdFluxB=row["i_bdFluxB"],
+                                                            r_bdFluxB=row["r_bdFluxB"],
+                                                            u_bdFluxB=row["u_bdFluxB"],
+                                                            y_bdFluxB=row["y_bdFluxB"],
+                                                            z_bdFluxB=row["z_bdFluxB"],
+                                                            g_bdFluxD=row["g_bdFluxD"],
+                                                            i_bdFluxD=row["i_bdFluxD"],
+                                                            r_bdFluxD=row["r_bdFluxD"],
+                                                            u_bdFluxD=row["u_bdFluxD"],
+                                                            y_bdFluxD=row["y_bdFluxD"],
+                                                            z_bdFluxD=row["z_bdFluxD"],
+                                                            g_bdReB=row["g_bdReB"],
+                                                            i_bdReB=row["i_bdReB"],
+                                                            r_bdReB=row["r_bdReB"],
+                                                            u_bdReB=row["u_bdReB"],
+                                                            y_bdReB=row["y_bdReB"],
+                                                            z_bdReB=row["z_bdReB"],
+                                                            g_bdReD=row["g_bdReD"],
+                                                            i_bdReD=row["i_bdReD"],
+                                                            r_bdReD=row["r_bdReD"],
+                                                            u_bdReD=row["u_bdReD"],
+                                                            y_bdReD=row["y_bdReD"],
+                                                            z_bdReD=row["z_bdReD"])    
+            db.add(data_release_object_record)
+            db.commit()
+        except Exception as e:
+            logger.log_text(e)
     return
 
 # Note: plural
@@ -417,9 +477,9 @@ def create_new_batch(project_id, vendor_batch_id):
         db.add(citizen_science_batch_record)
         db.commit()
         logger.log_text("about to log citizen_science_batch_record")
-        logger.log_text(dir(citizen_science_batch_record))
+        logger.log_text(str(dir(citizen_science_batch_record)))
         logger.log_text("about to log citizen_science_batch_record.cit_sci_batch_id")
-        logger.log_text(citizen_science_batch_record.cit_sci_batch_id)
+        logger.log_text(str(citizen_science_batch_record.cit_sci_batch_id))
         batchId = citizen_science_batch_record.cit_sci_batch_id
     except Exception as e:
         logger.log_text(e)
@@ -437,16 +497,16 @@ def check_batch_status(project_id, vendor_project_id):
     vendor_batch_id_db = 0
     try:
         db = CitizenScienceBatches.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-        stmt = select(CitizenScienceBatches).where(CitizenScienceBatches.cit_sci_proj_id == project_id).where(CitizenScienceBatches.batch_status == 'ACTIVE')
+        stmt = select(CitizenScienceBatches).where(CitizenScienceBatches.cit_sci_proj_id == int(project_id)).where(CitizenScienceBatches.batch_status == 'ACTIVE')
         results = db.execute(stmt)
         for row in results.scalars():
-            batch_id = row['cit_sci_batch_id']
-            vendor_batch_id_db = row['vendor_batch_id']
+            batch_id = row.cit_sci_batch_id
+            vendor_batch_id_db = row.vendor_batch_id
             break
         logger.log_text("about to log batch_id")
-        logger.log_text(batch_id)
+        logger.log_text(str(batch_id))
         logger.log_text("about to log vendor_batch_id_db")
-        logger.log_text(vendor_batch_id_db)
+        logger.log_text(str(vendor_batch_id_db))
     except Exception as e:
         logger.log_text(e)
         validator.error = True
@@ -470,7 +530,7 @@ def check_batch_status(project_id, vendor_project_id):
         if update_batch_record == True:
             try:
                 logger.log_text("about to update batch in batch_id > 0 IF code block")
-                updt_stmt = update(CitizenScienceBatches).values(batch_status = "COMPLETE").where(CitizenScienceBatches.cit_sci_proj_id == project_id).where(CitizenScienceBatches.cit_sci_batch_id == batch_id)
+                updt_stmt = update(CitizenScienceBatches).values(batch_status = "COMPLETE").where(CitizenScienceBatches.cit_sci_proj_id == int(project_id)).where(CitizenScienceBatches.cit_sci_batch_id == batch_id)
                 db.execute(updt_stmt)
             except Exception as e:
                 logger.log_text(e)
@@ -486,52 +546,70 @@ def create_new_project_record(ownerId, vendorProjectId):
     project_id = None
     try:
         db = CitizenScienceProjects.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-        citizen_science_project_record = CitizenScienceBatches(vendor_project_id=vendorProjectId, project_status='ACTIVE')
+        citizen_science_project_record = CitizenScienceProjects(vendor_project_id=vendorProjectId, owner_id=ownerId, project_status='ACTIVE', excess_data_exception=False, data_rights_approved=False)
         db.add(citizen_science_project_record)
         db.commit()
         project_id = citizen_science_project_record.cit_sci_proj_id
 
         logger.log_text("about to log project_id")
-        logger.log_text(project_id)
+        logger.log_text(str(project_id))
 
     except Exception as e:
         validator.error = True
         response.status = "error"
         response.messages.append("An error occurred while attempting to create a new project owner record for you - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
+        logger.log_text("An exception occurred while creating a new project record")
+        logger.log_text(e)
+        logger.log(e)
 
+    logger.log_text("about to return from create_new_project_record")
     return project_id
 
 def lookup_project_record(vendorProjectId):
     global response, validator, debug
     time_mark(debug, "Start of lookup project record")
     project_id = None
+    status = None
+
+    logger.log_text("logging vendorProjectId:")
+    logger.log_text(vendorProjectId)
 
     try:
         db = CitizenScienceProjects.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-        stmt = select(CitizenScienceProjects).where(CitizenScienceProjects.vendor_project_id == vendorProjectId)
+        stmt = select(CitizenScienceProjects).where(str(CitizenScienceProjects.vendor_project_id) == int(vendorProjectId))
 
+        logger.log_text("about to execute query in lookup_project_record")
         results = db.execute(stmt)
+        logger.log_text("about to loop through results")
         for row in results.scalars():
-            status = row['project_status']
-            validator.data_rights_approved = row["data_rights_approved"]
+            logger.log_text("in a result in the loop!")
+            status = row.project_status
+            validator.data_rights_approved = row.data_rights_approved
 
+            logger.log_text("about to check project status")
             if status in CLOSED_PROJECT_STATUSES:
+                logger.log_text("project status in bad status!!!")
                 response.status = "error"
                 validator.error = True
                 response.messages.append("This project is in a status of " + status + " - either create a new project or contact Rubin to request for the project to be reopened.")
             else:
-                project_id = row['cit_sci_proj_id']
+                logger.log_text("project status is in a good place")
+                project_id = row.cit_sci_proj_id
 
-        logger.log_text("about to log status in lookup_project_record()")
-        logger.log_text(status)
-        logger.log_text("logging validator.data_rights_approved")
-        logger.log_text(validator.data_rights_approved)
+        # logger.log_text("about to log status in lookup_project_record()")
+        # logger.log_text(status)
+        # logger.log_text("logging validator.data_rights_approved")
+        # logger.log_text(validator.data_rights_approved)
 
     except Exception as e:
         validator.error = True
         response.status = "error"
+        logger.log_text("an exception occurred in lookup_project_record")
         response.messages.append("An error occurred while attempting to lookup your project record - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
+        logger.log_text(e)
+        logger.log(e)
 
+    logger.log_text("about to return project_id in lookup_project_record")
     return project_id
 
 def create_new_owner_record(email):
@@ -569,13 +647,14 @@ def lookup_owner_record(emailP):
 
         results = db.execute(stmt)
         for row in results.scalars():
-            ownerId = row['cit_sci_owner_id']
-            status = row['status']
+            ownerId = row.cit_sci_owner_id
+            status = row.status
+            break
 
-            if status in BAD_OWNER_STATUSES:
-                validator.error = True
-                response.status = "error"
-                response.messages.append("You are not/no longer eligible to use the Rubin Science Platform to send data to Zooniverse.")
+        if status in BAD_OWNER_STATUSES:
+            validator.error = True
+            response.status = "error"
+            response.messages.append("You are not/no longer eligible to use the Rubin Science Platform to send data to Zooniverse.")
 
                 # return ownerId
 
@@ -583,6 +662,8 @@ def lookup_owner_record(emailP):
         validator.error = True
         response.status = "error"
         response.messages.append("An error occurred while looking up your projects owner record - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
+        logger.log_text(e)
+        logger.log(e)
    
     return ownerId
 

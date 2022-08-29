@@ -9,9 +9,9 @@ class CitizenScienceProjMetaLookup(Base):
 
     # Column defs
     cit_sci_lookup_id = Column(Integer, primary_key=True)
-    cit_sci_proj_id = Column(Integer, ForeignKey('citizen_science_projects.cit_sci_proj_id'))
-    cit_sci_meta_id = Column(Integer, ForeignKey('citizen_science_meta.cit_sci_meta_id'))
-    cit_sci_batch_id = Column(Integer, ForeignKey('citizen_science_batchs.cit_sci_batch_id'))
+    cit_sci_proj_id = Column(Integer) # , ForeignKey('citizen_science_projects.cit_sci_proj_id')
+    cit_sci_meta_id = Column(Integer) # , ForeignKey('citizen_science_meta.cit_sci_meta_id')
+    cit_sci_batch_id = Column(Integer) # , ForeignKey('citizen_science_batchs.cit_sci_batch_id')
 
     def get_db_connection(db_host, db_port, db_name, db_user, db_pass):
             engine = sqlalchemy.create_engine("postgresql://{}:{}@{}:{}/{}".format(db_user, db_pass, db_host, db_port, db_name))
