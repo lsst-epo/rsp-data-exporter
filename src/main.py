@@ -133,7 +133,7 @@ def download_bucket_data_and_process():
             url = upload_csv(csv_path)
             if data_format == "object":
                 # create_csv_records(csv_path, url)
-                create_dr_object_records(csv_path, url)
+                create_dr_objects_records(csv_path, url)
 
         else: 
             # astro cutouts data
@@ -179,7 +179,10 @@ def create_csv_records(csv_path, csv_url, data_type):
         logger.log_text(str(row))
     return
 
-def create_dr_object_records(csv_path, csv_url):
+def create_dr_diaobject_records(csv_path, csv_url):
+    return
+
+def create_dr_objects_records(csv_path, csv_url):
     # DataReleaseObjects
     csv_file = open(csv_path, "rU")
     reader = csv.DictReader(csv_file)
@@ -576,10 +579,14 @@ def lookup_project_record(vendorProjectId):
 
     try:
         db = CitizenScienceProjects.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-        stmt = select(CitizenScienceProjects).where(str(CitizenScienceProjects.vendor_project_id) == int(vendorProjectId))
+        stmt = select(CitizenScienceProjects).where(CitizenScienceProjects.vendor_project_id == int(vendorProjectId))
 
         logger.log_text("about to execute query in lookup_project_record")
         results = db.execute(stmt)
+
+        logger.log_text("about to log results object info")
+        logger.log_text(str(dir(results)))
+
         logger.log_text("about to loop through results")
         for row in results.scalars():
             logger.log_text("in a result in the loop!")
@@ -595,11 +602,6 @@ def lookup_project_record(vendorProjectId):
             else:
                 logger.log_text("project status is in a good place")
                 project_id = row.cit_sci_proj_id
-
-        # logger.log_text("about to log status in lookup_project_record()")
-        # logger.log_text(status)
-        # logger.log_text("logging validator.data_rights_approved")
-        # logger.log_text(validator.data_rights_approved)
 
     except Exception as e:
         validator.error = True
