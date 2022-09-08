@@ -10,7 +10,7 @@ class DataReleaseObjects(Base):
 
     # Column defs
     edc_obj_ver_id = Column(BigInteger, primary_key=True)
-    objectId = Column(BigInteger)
+    objectid = Column(BigInteger)
     coord_dec = Column(DOUBLE_PRECISION)
     coord_ra = Column(DOUBLE_PRECISION)
     g_ra = Column(DOUBLE_PRECISION)

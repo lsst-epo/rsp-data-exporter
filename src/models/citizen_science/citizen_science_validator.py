@@ -5,6 +5,7 @@ class CitizenScienceValidator():
     data_rights_approved = False
     excess_data_approved = False
     active_batch = False
+    project_id = None
 
     def __init__(self, error = False, data_rights_approved = False, excess_data_approved = False, active_batch = False):
         self.error = error

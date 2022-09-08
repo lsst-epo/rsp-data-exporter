@@ -7,7 +7,7 @@ RUN useradd -ms /bin/bash lsst
 
 
 # Google Cloud's App Engine platform does not offer Python 3.8+ so grab v3.9 and build it
-RUN apt-get update && apt-get install -y software-properties-common build-essential zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev libssl-dev libreadline-dev libffi-dev libsqlite3-dev wget libbz2-dev
+RUN apt-get update && apt-get install -y software-properties-common build-essential zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev libssl-dev libreadline-dev libffi-dev libsqlite3-dev wget libbz2-dev vim
 WORKDIR /tmp
 RUN wget https://www.python.org/ftp/python/3.9.1/Python-3.9.1.tgz
 RUN tar -xf Python-3.9.1.tgz
