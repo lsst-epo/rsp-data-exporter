@@ -1,7 +1,8 @@
 import os, fnmatch, json, subprocess, csv, shutil, time
-import glob # for debugging
-from citizen_science_validator import CitizenScienceValidator
-from data_exporter_response import DataExporterResponse
+import glob
+from tokenize import tabsize # for debugging
+from models.citizen_science.citizen_science_validator import CitizenScienceValidator
+from models.data_exporter_response import DataExporterResponse
 from flask import Flask, request, Response
 from google.cloud import storage
 import panoptes_client
@@ -13,11 +14,14 @@ import threading
 # Imports the Cloud Logging client library
 from google.cloud import logging
 import lsst.daf.butler as dafButler
-from models.citizen_science_batches import CitizenScienceBatches
-from models.citizen_science_projects import CitizenScienceProjects
-from models.citizen_science_owners import CitizenScienceOwners
-from models.citizen_science_meta import CitizenScienceMeta
-from models.citizen_science_proj_meta_lookup import CitizenScienceProjMetaLookup
+from models.citizen_science.citizen_science_batches import CitizenScienceBatches
+from models.citizen_science.citizen_science_projects import CitizenScienceProjects
+from models.citizen_science.citizen_science_owners import CitizenScienceOwners
+from models.citizen_science.citizen_science_meta import CitizenScienceMeta
+from models.citizen_science.citizen_science_proj_meta_lookup import CitizenScienceProjMetaLookup
+from models.data_release.data_release_diaobjects import DataReleaseDiaObjects
+from models.data_release.data_release_objects import DataReleaseObjects
+from models.data_release.data_release_forcedsources import DataReleaseForcedSources
 
 app = Flask(__name__)
 
@@ -100,6 +104,7 @@ def check_status_of_previously_executed_ingest():
 
 @app.route("/citizen-science-bucket-ingest")
 def download_bucket_data_and_process():
+    logger.log_text("inside of the current code!!!!")
     global response, validator, debug, urls
     guid = request.args.get("guid")
     email = request.args.get("email")
@@ -107,6 +112,7 @@ def download_bucket_data_and_process():
     vendor_batch_id = request.args.get("vendor_batch_id")
     data_type = request.args.get("data_type")
     debug = bool(request.args.get("debug"))
+    data_format = request.args.get("table")
     response = DataExporterResponse()
     response.messages = []
     validator = CitizenScienceValidator()
@@ -114,19 +120,31 @@ def download_bucket_data_and_process():
 
     time_mark(debug, __name__)
     
-    # validate_project_metadata(email, vendor_project_id, vendor_batch_id) # temporarily commented out while the tabular data transfer is tested
+    validate_project_metadata(email, vendor_project_id, vendor_batch_id) # temporarily commented out while the tabular data transfer is tested
 
     if data_type != None:
         logger.log_text("logging data_type: " + data_type)
     else:
-        logger.log_test("data_type is None")
+        logger.log_text("data_type is None")
     
     if validator.error is False:
         if data_type != None and data_type == "TABULAR_DATA":
             csv_path = download_zip(CLOUD_STORAGE_BUCKET_HIPS2FITS , guid + ".zip", guid, data_type)[0]
             # to-do: Upload CSV?
+            logger.log_text("about to call upload_csv()")
             url = upload_csv(csv_path)
-            create_csv_records(csv_path, url)
+            logger.log_text("done running upload_csv()")
+            if data_format == "objects":
+                logger.log_text("data_format == object, about to call create_dr_object_records")
+                create_dr_objects_records(csv_path, url)
+            elif data_format == "diaobjects":
+                logger.log_text("data_format == object, about to call create_dr_diaobject_records")
+                create_dr_diaobject_records(csv_path, url)
+            elif data_format == "forcedsources":
+                logger.log_text("data_format == object, about to call create_dr_forcedsource_records")
+                create_dr_forcedsource_records(csv_path, url)
+            else:
+                logger.log_text("data_format != object!!!")
 
         else: 
             # astro cutouts data
@@ -163,13 +181,170 @@ def upload_csv(csv_path):
     logger.log_text(blob.public_url)
     return blob.public_url
 
-def create_csv_records(csv_path, csv_url):
+def create_csv_records(csv_path, csv_url, data_type):
     csv_file = open(csv_path, "rU")
     reader = csv.reader(csv_file, delimiter=',')
     logger.log_text("about to loop CSV file contents in upload_csv")
     line_count = 0 # relevant to data rights approval limits, and zooniverse business rules for transfer thresholds
     for row in reader:
         logger.log_text(str(row))
+    return
+
+def create_dr_forcedsource_records(csv_path, csv_url):
+    csv_file = open(csv_path, "rU")
+    reader = csv.DictReader(csv_file)
+    logger.log_text("about to loop CSV file contents in create_dr_forcedsource_records")
+    for row in reader:
+        try:
+            db = DataReleaseForcedSources.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+            data_release_forcedsource_record = DataReleaseForcedSources(forcedsourceid=row["forcedSourceId"],
+                                                                        objectid=row["objectId"],
+                                                                        parentobjectid=row["parentObjectId"],
+                                                                        coord_ra=row["coord_ra"],
+                                                                        coord_dec=row["coord_dec"],
+                                                                        skymap=row["skymap"],
+                                                                        tract=row["tract"],
+                                                                        patch=row["patch"],
+                                                                        band=row["band"],
+                                                                        ccdvisitid=row["ccdVisitId"],
+                                                                        detect_ispatchinner=bool(row["detect_isPatchInner"]),
+                                                                        detect_isprimary=bool(row["detect_isPrimary"]),
+                                                                        detect_istractinner=bool(row["detect_isTractInner"]),
+                                                                        localbackground_instfluxerr=row["localBackground_instFluxErr"],
+                                                                        localbackground_instflux=row["localBackground_instFlux"],
+                                                                        localphotocaliberr=row["localPhotoCalibErr"],
+                                                                        localphotocalib_flag=bool(row["localPhotoCalib_flag"]),
+                                                                        localphotocalib=row["localPhotoCalib"],
+                                                                        localwcs_cdmatrix_1_1=row["localWcs_CDMatrix_1_1"],
+                                                                        localwcs_cdmatrix_1_2=row["localWcs_CDMatrix_1_2"],
+                                                                        localwcs_cdmatrix_2_1=row["localWcs_CDMatrix_2_1"],
+                                                                        localwcs_cdmatrix_2_2=row["localWcs_CDMatrix_2_2"],
+                                                                        localwcs_flag=bool(row["localWcs_flag"]),
+                                                                        pixelflags_bad=bool(row["pixelFlags_bad"]),
+                                                                        pixelflags_crcenter=bool(row["pixelFlags_crCenter"]),
+                                                                        pixelflags_cr=bool(row["pixelFlags_cr"]),
+                                                                        pixelflags_edge=bool(row["pixelFlags_edge"]),
+                                                                        pixelflags_interpolatedcenter=bool(row["pixelFlags_interpolatedCenter"]),
+                                                                        pixelflags_interpolated=bool(row["pixelFlags_interpolated"]),
+                                                                        pixelflags_saturatedcenter=bool(row["pixelFlags_saturatedCenter"]),
+                                                                        pixelflags_saturated=bool(row["pixelFlags_saturated"]),
+                                                                        pixelflags_suspectcenter=bool(row["pixelFlags_suspectCenter"]),
+                                                                        pixelflags_suspect=bool(row["pixelFlags_suspect"]),
+                                                                        psfdifffluxerr=row["psfDiffFluxErr"],
+                                                                        psfdiffflux_flag=bool(row["psfDiffFlux_flag"]),
+                                                                        psfdiffflux=row["psfDiffFlux"],
+                                                                        psffluxerr=row["psfFluxErr"],
+                                                                        psfflux_flag=bool(row["psfFlux_flag"]),
+                                                                        psfflux=row["psfFlux"])
+            db.add(data_release_forcedsource_record)
+            db.commit()
+            db.close()
+        except Exception as e:
+            logger.log_text("an exception occurred in create_dr_forcedsource_records!")
+            logger.log_text(e.__str__())
+    return
+
+def create_dr_diaobject_records(csv_path, csv_url):
+    csv_file = open(csv_path, "rU")
+    reader = csv.DictReader(csv_file)
+    logger.log_text("about to loop CSV file contents in create_dr_diaobject_records")
+    
+    for row in reader:
+        try:
+            db = DataReleaseDiaObjects.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+            data_release_diaobject_record = DataReleaseDiaObjects(ra=row["ra"],
+                                                                  decl=row["decl"],
+                                                                  rpsfluxchi2=row["rPSFluxChi2"],
+                                                                  ipsfluxchi2=row["iPSFluxChi2"],
+                                                                  gpsfluxchi2=row["gPSFluxChi2"],
+                                                                  upsfluxchi2=row["uPSFluxChi2"],
+                                                                  ypsfluxchi2=row["yPSFluxChi2"],
+                                                                  zpsfluxchi2=row["zPSFluxChi2"],
+                                                                  gpsfluxmax=row["gPSFluxMax"],
+                                                                  ipsfluxmax=row["iPSFluxMax"],
+                                                                  rpsfluxmax=row["rPSFluxMax"],
+                                                                  upsfluxmax=row["uPSFluxMax"],
+                                                                  ypsfluxmax=row["yPSFluxMax"],
+                                                                  zpsfluxmax=row["zPSFluxMax"],
+                                                                  gpsfluxmin=row["gPSFluxMin"],
+                                                                  ipsfluxmin=row["iPSFluxMin"],
+                                                                  rpsfluxmin=row["rPSFluxMin"],
+                                                                  upsfluxmin=row["uPSFluxMin"],
+                                                                  ypsfluxmin=row["yPSFluxMin"],
+                                                                  zpsfluxmin=row["zPSFluxMin"],
+                                                                  gpsfluxmean=row["gPSFluxMean"],
+                                                                  ipsfluxmean=row["iPSFluxMean"],
+                                                                  rpsfluxmean=row["rPSFluxMean"],
+                                                                  upsfluxmean=row["uPSFluxMean"],
+                                                                  ypsfluxmean=row["yPSFluxMean"],
+                                                                  zpsfluxmean=row["zPSFluxMean"],
+                                                                  gpsfluxndata=row["gPSFluxNdata"],
+                                                                  ipsfluxndata=row["iPSFluxNdata"],
+                                                                  rpsfluxndata=row["rPSFluxNdata"],
+                                                                  upsfluxndata=row["uPSFluxNdata"],
+                                                                  ypsfluxndata=row["yPSFluxNdata"],
+                                                                  zpsfluxndata=row["zPSFluxNdata"])  
+            db.add(data_release_diaobject_record)
+            db.commit()
+            db.close()
+        except Exception as e:
+            logger.log_text("an exception occurred in create_dr_diaobject_records!")
+            logger.exception(e.__str__())
+    return
+
+def create_dr_objects_records(csv_path, csv_url):
+    logger.log_text("inside of create_dr_objects_records()")
+    csv_file = open(csv_path, "rU")
+    reader = csv.DictReader(csv_file)
+    logger.log_text("about to loop CSV file contents in create_dr_objects_records")
+    for row in reader:
+        try:
+            db = DataReleaseObjects.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+            data_release_object_record = DataReleaseObjects(objectid=row["objectId"],
+                                                            coord_dec=row["coord_dec"],
+                                                            coord_ra=row["Coord_ra"],
+                                                            g_ra=row["g_ra"],
+                                                            i_ra=row["i_ra"],
+                                                            r_ra=row["r_ra"],
+                                                            u_ra=row["u_ra"],
+                                                            y_ra=row["y_ra"],
+                                                            z_ra=row["z_ra"],
+                                                            g_decl=row["g_decl"],
+                                                            i_decl=row["i_decl"],
+                                                            r_decl=row["r_decl"],
+                                                            u_decl=row["u_decl"],
+                                                            y_decl=row["y_decl"],
+                                                            z_decl=row["z_decl"],
+                                                            g_bdFluxB=row["g_bdFluxB"],
+                                                            i_bdFluxB=row["i_bdFluxB"],
+                                                            r_bdFluxB=row["r_bdFluxB"],
+                                                            u_bdFluxB=row["u_bdFluxB"],
+                                                            y_bdFluxB=row["y_bdFluxB"],
+                                                            z_bdFluxB=row["z_bdFluxB"],
+                                                            g_bdFluxD=row["g_bdFluxD"],
+                                                            i_bdFluxD=row["i_bdFluxD"],
+                                                            r_bdFluxD=row["r_bdFluxD"],
+                                                            u_bdFluxD=row["u_bdFluxD"],
+                                                            y_bdFluxD=row["y_bdFluxD"],
+                                                            z_bdFluxD=row["z_bdFluxD"],
+                                                            g_bdReB=row["g_bdReB"],
+                                                            i_bdReB=row["i_bdReB"],
+                                                            r_bdReB=row["r_bdReB"],
+                                                            u_bdReB=row["u_bdReB"],
+                                                            y_bdReB=row["y_bdReB"],
+                                                            z_bdReB=row["z_bdReB"],
+                                                            g_bdReD=row["g_bdReD"],
+                                                            i_bdReD=row["i_bdReD"],
+                                                            r_bdReD=row["r_bdReD"],
+                                                            u_bdReD=row["u_bdReD"],
+                                                            y_bdReD=row["y_bdReD"],
+                                                            z_bdReD=row["z_bdReD"])    
+            db.add(data_release_object_record)
+            db.commit()
+            db.close()
+        except Exception as e:
+            logger.log_text("an exception occurred in create_dr_object_records!")
+            logger.exception(e.__str__())
     return
 
 # Note: plural
@@ -354,6 +529,8 @@ def validate_project_metadata(email, vendor_project_id, vendor_batch_id = None):
             project_id = lookup_project_record(vendor_project_id)
             if project_id is None:
                 project_id = create_new_project_record(ownerId, vendor_project_id)
+            
+            validator.project_id = project_id
     else:
         return
 
@@ -413,15 +590,20 @@ def create_new_batch(project_id, vendor_batch_id):
     batchId = -1;
     try:
         db = CitizenScienceBatches.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        db.expire_on_commit = False
         citizen_science_batch_record = CitizenScienceBatches(cit_sci_proj_id=project_id, vendor_batch_id=vendor_batch_id, batch_status='ACTIVE')    
         db.add(citizen_science_batch_record)
+        
+        logger.log_text("### about to commit()")
         db.commit()
-        logger.log_text("about to log citizen_science_batch_record")
-        logger.log_text(dir(citizen_science_batch_record))
-        logger.log_text("about to log citizen_science_batch_record.cit_sci_batch_id")
-        logger.log_text(citizen_science_batch_record.cit_sci_batch_id)
+        logger.log_text("### about to expunge_all()")
+        db.expunge_all()
+        logger.log_text("### about to close()")
+        db.close()
+        logger.log_text("### about to assign batch id")
         batchId = citizen_science_batch_record.cit_sci_batch_id
     except Exception as e:
+        logger.log_text(e.__str__())
         logger.log_text(e)
         validator.error = True
         response.status = "error"
@@ -432,52 +614,70 @@ def create_new_batch(project_id, vendor_batch_id):
 def check_batch_status(project_id, vendor_project_id):
     # First, look up batches in the database, which may 
     global validator, debug
-    time_mark(debug, "Start of check batch status")
+    time_mark(debug, "Start of check batch status!!!")
+    logger.log_text("inside of check_batch_status, logging project_id : " + str(project_id))
     batch_id = -1
     vendor_batch_id_db = 0
     try:
         db = CitizenScienceBatches.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
         stmt = select(CitizenScienceBatches).where(CitizenScienceBatches.cit_sci_proj_id == project_id).where(CitizenScienceBatches.batch_status == 'ACTIVE')
         results = db.execute(stmt)
+        
+        batch_record = None
         for row in results.scalars():
-            batch_id = row['cit_sci_batch_id']
-            vendor_batch_id_db = row['vendor_batch_id']
+            batch_record = row
+            batch_id = row.cit_sci_batch_id
+            vendor_batch_id_db = row.vendor_batch_id
             break
         logger.log_text("about to log batch_id")
-        logger.log_text(batch_id)
+        logger.log_text(str(batch_id))
         logger.log_text("about to log vendor_batch_id_db")
-        logger.log_text(vendor_batch_id_db)
+        logger.log_text(str(vendor_batch_id_db))
+        db.commit()
+
+        update_batch_record = False
+        logger.log_text("about to evaluate batch_id after checking the DB")
+        if batch_id > 0: # An active batch record was found in the DB
+            # Call the Zooniverse API to get all subject sets for the project
+            project = Project.find(int(vendor_project_id))
+
+            logger.log_text("about to log project:")
+            logger.log_text(str(project.raw))
+
+            
+            if len(list(project.links.subject_sets)) == 0:
+                logger.log_text("the length of project.links.subject_sets is 0!")
+                update_batch_record = True
+            else:
+                logger.log_text("the length of project.links.subject_sets is > 0! : " + str(len(list(project.links.subject_sets))))
+                
+                for sub in list(project.links.subject_sets):
+                    logger.log_text("looping through project.links.subject_sets")
+                    if str(vendor_batch_id_db) == sub.id:
+                        for completeness_key in sub.completeness:
+                            if sub.completeness[completeness_key] == 1.0:
+                                update_batch_record = True
+                            else:
+                                update_batch_record = False
+                                break
+        if update_batch_record == True:
+            logger.log_text("update_batch_record is True!")
+            logger.log_text("about to update batch in batch_id > 0 IF code block")
+            logger.log_text("project_id: " + str(project_id))
+            logger.log_text("batch_id: " + str(batch_id))
+            logger.log_text("about to update the batch_record.batch_status")
+            batch_record.batch_status = "COMPLETE"
+            logger.log_text("about to commit!!!!!")
+            db.commit()
+            batch_id = -1
     except Exception as e:
-        logger.log_text(e)
+        logger.exception(e.__str__())
         validator.error = True
         response.status = "error"
         response.messages.append("An error occurred while attempting to lookup your batch records - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
         return
 
-    if batch_id > 0: # An active batch record was found in the DB
-        # Call the Zooniverse API to get all subject sets for the project
-        project = Project.find(int(vendor_project_id))
-
-        update_batch_record = False;
-        for sub in list(project.links.subject_sets):
-            if str(vendor_batch_id_db) == sub.id:
-                for completeness_key in sub.completeness:
-                    if sub.completeness[completeness_key] == 1.0:
-                        update_batch_record = True
-                    else:
-                        update_batch_record = False
-                        break
-        if update_batch_record == True:
-            try:
-                logger.log_text("about to update batch in batch_id > 0 IF code block")
-                updt_stmt = update(CitizenScienceBatches).values(batch_status = "COMPLETE").where(CitizenScienceBatches.cit_sci_proj_id == project_id).where(CitizenScienceBatches.cit_sci_batch_id == batch_id)
-                db.execute(updt_stmt)
-            except Exception as e:
-                logger.log_text(e)
-                validator.error = True
-                response.status = "error"
-                response.messages.append("An error occurred while attempting to create a new data batch record for you - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
-    
+    db.close()
     return batch_id
 
 def create_new_project_record(ownerId, vendorProjectId):
@@ -486,52 +686,69 @@ def create_new_project_record(ownerId, vendorProjectId):
     project_id = None
     try:
         db = CitizenScienceProjects.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-        citizen_science_project_record = CitizenScienceBatches(vendor_project_id=vendorProjectId, project_status='ACTIVE')
+        citizen_science_project_record = CitizenScienceProjects(vendor_project_id=vendorProjectId, owner_id=ownerId, project_status='ACTIVE', excess_data_exception=False, data_rights_approved=False)
         db.add(citizen_science_project_record)
         db.commit()
+        db.close()
         project_id = citizen_science_project_record.cit_sci_proj_id
 
         logger.log_text("about to log project_id")
-        logger.log_text(project_id)
+        logger.log_text(str(project_id))
 
     except Exception as e:
         validator.error = True
         response.status = "error"
         response.messages.append("An error occurred while attempting to create a new project owner record for you - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
+        logger.log_text("An exception occurred while creating a new project record")
+        logger.exception(e.__str__())
 
+    logger.log_text("about to return from create_new_project_record")
     return project_id
 
 def lookup_project_record(vendorProjectId):
     global response, validator, debug
     time_mark(debug, "Start of lookup project record")
     project_id = None
+    status = None
+
+    logger.log_text("logging vendorProjectId:")
+    logger.log_text(vendorProjectId)
 
     try:
         db = CitizenScienceProjects.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-        stmt = select(CitizenScienceProjects).where(CitizenScienceProjects.vendor_project_id == vendorProjectId)
+        stmt = select(CitizenScienceProjects).where(CitizenScienceProjects.vendor_project_id == int(vendorProjectId))
 
+        logger.log_text("about to execute query in lookup_project_record")
         results = db.execute(stmt)
-        for row in results.scalars():
-            status = row['project_status']
-            validator.data_rights_approved = row["data_rights_approved"]
+        
 
+        logger.log_text("about to log results object info")
+        logger.log_text(str(dir(results)))
+
+        logger.log_text("about to loop through results")
+        for row in results.scalars():
+            logger.log_text("in a result in the loop!")
+            status = row.project_status
+            validator.data_rights_approved = row.data_rights_approved
+
+            logger.log_text("about to check project status")
             if status in CLOSED_PROJECT_STATUSES:
+                logger.log_text("project status in bad status!!!")
                 response.status = "error"
                 validator.error = True
                 response.messages.append("This project is in a status of " + status + " - either create a new project or contact Rubin to request for the project to be reopened.")
             else:
-                project_id = row['cit_sci_proj_id']
-
-        logger.log_text("about to log status in lookup_project_record()")
-        logger.log_text(status)
-        logger.log_text("logging validator.data_rights_approved")
-        logger.log_text(validator.data_rights_approved)
-
+                logger.log_text("project status is in a good place")
+                project_id = row.cit_sci_proj_id
+        db.close()
     except Exception as e:
         validator.error = True
         response.status = "error"
+        logger.log_text("an exception occurred in lookup_project_record")
         response.messages.append("An error occurred while attempting to lookup your project record - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
+        logger.exception(e.__str__())
 
+    logger.log_text("about to return project_id in lookup_project_record")
     return project_id
 
 def create_new_owner_record(email):
@@ -544,12 +761,14 @@ def create_new_owner_record(email):
         citizen_science_owner_record = CitizenScienceOwners(email=email, status='ACTIVE')
         db.add(citizen_science_owner_record)
         db.commit()
+        db.close()
         owner_id = citizen_science_owner_record.cit_sci_owner_id
         # return owner_id
 
     except Exception as e:
         validator.error = True
         response.status = "error"
+        logger.exception(e.__str__())
         response.messages.append("An error occurred while attempting to create a new project owner record for you - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
 
     return owner_id
@@ -569,20 +788,22 @@ def lookup_owner_record(emailP):
 
         results = db.execute(stmt)
         for row in results.scalars():
-            ownerId = row['cit_sci_owner_id']
-            status = row['status']
+            ownerId = row.cit_sci_owner_id
+            status = row.status
+            break
 
-            if status in BAD_OWNER_STATUSES:
-                validator.error = True
-                response.status = "error"
-                response.messages.append("You are not/no longer eligible to use the Rubin Science Platform to send data to Zooniverse.")
+        if status in BAD_OWNER_STATUSES:
+            validator.error = True
+            response.status = "error"
+            response.messages.append("You are not/no longer eligible to use the Rubin Science Platform to send data to Zooniverse.")
 
                 # return ownerId
-
+        db.close()
     except Exception as e:
         validator.error = True
         response.status = "error"
         response.messages.append("An error occurred while looking up your projects owner record - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
+        logger.exception(e.__str__())
    
     return ownerId
 
@@ -594,17 +815,19 @@ def lookup_meta_record(sourceId, sourceIdType):
         for row in results.scalars():
             metaId = row.cit_sci_meta_id
 
+        db.close()
+
         logger.log_text("about to log metaId in lookup_meta_record()")
         logger.log_text(metaId)
 
     except Exception as e:
-        print(e)
+        logger.exception(e.__str__())
         return e
    
     return metaId
 
 def insert_meta_record(uri, sourceId, sourceIdType, projectId):
-    global debug
+    global debug, validator
 
     # Temp hardcoded variables
     edcVerId = 11000222
@@ -616,8 +839,9 @@ def insert_meta_record(uri, sourceId, sourceIdType, projectId):
         citizen_science_meta_record = CitizenScienceMeta(edc_ver_id=edcVerId, source_id=sourceId, source_id_type=sourceIdType, uri=uri, public=public)
         db.add(citizen_science_meta_record)
         db.commit()
+        db.close()
         metaRecordId = citizen_science_meta_record.cit_sci_meta_id
-        errorOccurred = True if insert_lookup_record(metaRecordId, projectId) else False
+        errorOccurred = True if insert_lookup_record(metaRecordId, validator.project_id) else False
 
         logger.log_text("about to log metaRecordId")
         logger.log_text(metaRecordId)
@@ -626,7 +850,7 @@ def insert_meta_record(uri, sourceId, sourceIdType, projectId):
         # Is the exception because of a duplicate key error? If so, lookup the ID of the meta record and perform the insert into the lookup table
         if "non_dup_records" in e.__str__():
             metaId = lookup_meta_record(sourceId, sourceIdType)
-            return insert_lookup_record(metaId, projectId)
+            return insert_lookup_record(metaId, validator.project_id)
         return False
     return errorOccurred
 
@@ -636,7 +860,7 @@ def insert_lookup_record(metaRecordId, projectId):
         citizen_science_proj_meta_lookup_record = CitizenScienceProjMetaLookup(cit_sci_proj_id=projectId, cit_sci_meta_id=metaRecordId)
         db.add(citizen_science_proj_meta_lookup_record)
         db.commit()
-            
+        db.close()
     except Exception as e:
         logger.exception(e.__str__())
         return False
@@ -652,7 +876,7 @@ def init_connection_engine():
     db_config = {
         # [START cloud_sql_postgres_sqlalchemy_limit]
         # Pool size is the maximum number of permanent connections to keep.
-        "pool_size": 5,
+        "pool_size": 10,
         # Temporarily exceeds the set pool_size if no connections are available.
         "max_overflow": 2,
         # The total number of concurrent connections for your application will be
