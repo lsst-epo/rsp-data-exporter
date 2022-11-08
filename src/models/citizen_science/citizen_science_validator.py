@@ -6,6 +6,9 @@ class CitizenScienceValidator():
     excess_data_approved = False
     active_batch = False
     project_id = None
+    log_to_edc = False
+    edc_logger_notes = ""
+    edc_logger_category = ""
 
     def __init__(self, error = False, data_rights_approved = False, excess_data_approved = False, active_batch = False):
         self.error = error

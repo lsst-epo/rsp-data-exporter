@@ -1,6 +1,7 @@
 import os, fnmatch, json, subprocess, csv, shutil, time
 import glob
-from tokenize import tabsize # for debugging
+from tokenize import tabsize
+from unicodedata import category # for debugging
 from models.citizen_science.citizen_science_validator import CitizenScienceValidator
 from models.data_exporter_response import DataExporterResponse
 from flask import Flask, request, Response
@@ -22,11 +23,13 @@ from models.citizen_science.citizen_science_proj_meta_lookup import CitizenScien
 from models.data_release.data_release_diaobjects import DataReleaseDiaObjects
 from models.data_release.data_release_objects import DataReleaseObjects
 from models.data_release.data_release_forcedsources import DataReleaseForcedSources
+from models.edc_logger import EdcLogger
 
 app = Flask(__name__)
 
 CLOUD_STORAGE_BUCKET = os.environ['CLOUD_STORAGE_BUCKET']
 CLOUD_STORAGE_BUCKET_HIPS2FITS = os.environ['CLOUD_STORAGE_BUCKET_HIPS2FITS']
+CLOUD_STORAGE_CIT_SCI_URL_PREFIX = os.environ["CLOUD_STORAGE_CIT_SCI_URL_PREFIX"]
 CLOUD_STORAGE_CIT_SCI_PUBLIC = os.environ["CLOUD_STORAGE_CIT_SCI_PUBLIC"]
 DB_USER = os.environ['DB_USER']
 DB_PASS = os.environ['DB_PASS']
@@ -94,7 +97,7 @@ def check_status_of_previously_executed_ingest():
 
     if exists:
         response.status = "success"
-        response.manifest_url = "https://storage.googleapis.com/citizen-science-data/" + guid + "/manifest.csv"
+        response.manifest_url = CLOUD_STORAGE_CIT_SCI_URL_PREFIX + CLOUD_STORAGE_CIT_SCI_PUBLIC + "/" + guid + "/manifest.csv"
     else:
         response.status = "error"
         response.messages.append("The job either failed or is still processing, please try again later.")
@@ -120,12 +123,12 @@ def download_bucket_data_and_process():
 
     time_mark(debug, __name__)
     
-    validate_project_metadata(email, vendor_project_id, vendor_batch_id) # temporarily commented out while the tabular data transfer is tested
-
     if data_type != None:
         logger.log_text("logging data_type: " + data_type)
     else:
         logger.log_text("data_type is None")
+        # Only validate data as part of the the citizen science data pipeline
+        validate_project_metadata(email, vendor_project_id, vendor_batch_id) 
     
     if validator.error is False:
         if data_type != None and data_type == "TABULAR_DATA":
@@ -165,7 +168,6 @@ def download_bucket_data_and_process():
             response.messages.append("An error occurred while processing the data batch, please try again later.")
 
     res = json.dumps(response.__dict__)
-    # logger.log_text(res)
     time_mark(debug, "Done processing, return response to notebook aspect")
     return res
 
@@ -289,7 +291,7 @@ def create_dr_diaobject_records(csv_path, csv_url):
             db.close()
         except Exception as e:
             logger.log_text("an exception occurred in create_dr_diaobject_records!")
-            logger.exception(e.__str__())
+            logger.log_text(e.__str__())
     return
 
 def create_dr_objects_records(csv_path, csv_url):
@@ -344,7 +346,7 @@ def create_dr_objects_records(csv_path, csv_url):
             db.close()
         except Exception as e:
             logger.log_text("an exception occurred in create_dr_object_records!")
-            logger.exception(e.__str__())
+            logger.log_text(e.__str__())
     return
 
 # Note: plural
@@ -524,7 +526,7 @@ def validate_project_metadata(email, vendor_project_id, vendor_batch_id = None):
     # Then, lookup project
     if validator.error == False:
         if(newOwner == True):
-            project_id = create_new_project_record(vendor_project_id)
+            project_id = create_new_project_record(ownerId, vendor_project_id)
         else:
             project_id = lookup_project_record(vendor_project_id)
             if project_id is None:
@@ -547,11 +549,27 @@ def validate_project_metadata(email, vendor_project_id, vendor_batch_id = None):
             else:
                 return False
         else:
+            logger.log_text("about to check if create_edc_logger_record() needs to be called")
+            if validator.log_to_edc:
+                logger.log_text("calling! create_edc_logger_record()")
+                create_edc_logger_record()
             validator.error = True
             response.messages.append("You currently have an active batch of data on the Zooniverse platform and cannot create a new batch until the current batch has been completed.")
             return False
     else:
         return False
+
+def create_edc_logger_record():
+    db = EdcLogger.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+    notes_obj = json.loads(validator.edc_logger_notes)
+
+    edc_logger_record = EdcLogger(application_name="rsp-data-exporter", run_id=notes_obj.vendor_batch_id, notes=validator.edc_logger_notes, category=validator.edc_logger_category)
+    logger.log_text("about to commit edc-logger record")
+    db.add(edc_logger_record)
+    db.commit()
+    db.close()
+    logger.log_text("committed edc-logger record!")
+    return
 
 # To-do: Add vendor_batch_id to workflow of this function/route
 @app.route("/citizen-science-butler-ingest")
@@ -644,13 +662,13 @@ def check_batch_status(project_id, vendor_project_id):
             logger.log_text("about to log project:")
             logger.log_text(str(project.raw))
 
-            
-            if len(list(project.links.subject_sets)) == 0:
+            subject_set_list = list(project.links.subject_sets)
+            if len(subject_set_list) == 0:
                 logger.log_text("the length of project.links.subject_sets is 0!")
                 update_batch_record = True
             else:
                 logger.log_text("the length of project.links.subject_sets is > 0! : " + str(len(list(project.links.subject_sets))))
-                
+                    
                 for sub in list(project.links.subject_sets):
                     logger.log_text("looping through project.links.subject_sets")
                     if str(vendor_batch_id_db) == sub.id:
@@ -658,20 +676,40 @@ def check_batch_status(project_id, vendor_project_id):
                             if sub.completeness[completeness_key] == 1.0:
                                 update_batch_record = True
                             else:
-                                update_batch_record = False
-                                break
+                                # Found the batch, but it's not complete, check if it contains subjects or not
+                                try:
+                                    first = next(subject_set_list[0].subjects)
+                                    if first is not None:
+                                        # Active batch with subjects, return
+                                        logger.log_text("first is NOT None!!!")
+                                        update_batch_record = False
+                                        break
+                                    else:
+                                        logger.log_text("Erroneous caching of Zooniverse client, updating EDC database");
+                                        update_batch_record = True
+                                        batch_id = -1
+                                        break
+                                except StopIteration:
+                                    logger.log_text("setting validator.error to True!")
+                                    validator.error = True
+                                    validator.log_to_edc = True
+                                    validator.edc_logger_category = "BATCH_LOOKUP"
+                                    logger_notes = {
+                                        "project_id" : project_id,
+                                        "batch_id" : batch_id,
+                                        "vendor_project_id" : vendor_project_id,
+                                        "vendor_batch_id" : vendor_batch_id_db
+                                    }
+                                    validator.edc_logger_notes = json.dumps(logger_notes)
+                                    response.status = "error"
+                                    response.messages.append("You have an active, but empty subject set on the zooniverse platform with an ID of " + str(vendor_batch_id_db) + ". Please delete this subject set on the Zoonivese platform and try again.")
+                                    return  
         if update_batch_record == True:
-            logger.log_text("update_batch_record is True!")
-            logger.log_text("about to update batch in batch_id > 0 IF code block")
-            logger.log_text("project_id: " + str(project_id))
-            logger.log_text("batch_id: " + str(batch_id))
-            logger.log_text("about to update the batch_record.batch_status")
             batch_record.batch_status = "COMPLETE"
-            logger.log_text("about to commit!!!!!")
             db.commit()
             batch_id = -1
     except Exception as e:
-        logger.exception(e.__str__())
+        logger.log_text(e.__str__())
         validator.error = True
         response.status = "error"
         response.messages.append("An error occurred while attempting to lookup your batch records - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
@@ -685,22 +723,20 @@ def create_new_project_record(ownerId, vendorProjectId):
     time_mark(debug, "Start of create new project")
     project_id = None
     try:
+        logger.log_text("about to create new project record!")
         db = CitizenScienceProjects.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
         citizen_science_project_record = CitizenScienceProjects(vendor_project_id=vendorProjectId, owner_id=ownerId, project_status='ACTIVE', excess_data_exception=False, data_rights_approved=False)
         db.add(citizen_science_project_record)
         db.commit()
-        db.close()
         project_id = citizen_science_project_record.cit_sci_proj_id
 
-        logger.log_text("about to log project_id")
-        logger.log_text(str(project_id))
 
     except Exception as e:
         validator.error = True
         response.status = "error"
         response.messages.append("An error occurred while attempting to create a new project owner record for you - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
         logger.log_text("An exception occurred while creating a new project record")
-        logger.exception(e.__str__())
+        logger.log_text(e.__str__())
 
     logger.log_text("about to return from create_new_project_record")
     return project_id
@@ -746,7 +782,7 @@ def lookup_project_record(vendorProjectId):
         response.status = "error"
         logger.log_text("an exception occurred in lookup_project_record")
         response.messages.append("An error occurred while attempting to lookup your project record - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
-        logger.exception(e.__str__())
+        logger.log_text(e.__str__())
 
     logger.log_text("about to return project_id in lookup_project_record")
     return project_id
@@ -757,18 +793,16 @@ def create_new_owner_record(email):
 
     owner_id = None;
     try:
+        logger.log_text("about to insert new owner record")
         db = CitizenScienceOwners.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
         citizen_science_owner_record = CitizenScienceOwners(email=email, status='ACTIVE')
         db.add(citizen_science_owner_record)
         db.commit()
-        db.close()
         owner_id = citizen_science_owner_record.cit_sci_owner_id
-        # return owner_id
-
     except Exception as e:
         validator.error = True
         response.status = "error"
-        logger.exception(e.__str__())
+        logger.log_text(e.__str__())
         response.messages.append("An error occurred while attempting to create a new project owner record for you - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
 
     return owner_id
@@ -776,9 +810,6 @@ def create_new_owner_record(email):
 def lookup_owner_record(emailP):
     global validator, response, debug
     time_mark(debug, "Looking up owner record")
-    # stmt = sqlalchemy.text(
-    #     "SELECT cit_sci_owner_id, status FROM citizen_science_owners WHERE email=:email"
-    # )
     ownerId = None
     status = ""
 
@@ -803,7 +834,7 @@ def lookup_owner_record(emailP):
         validator.error = True
         response.status = "error"
         response.messages.append("An error occurred while looking up your projects owner record - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
-        logger.exception(e.__str__())
+        logger.log_text(e.__str__())
    
     return ownerId
 
@@ -821,7 +852,7 @@ def lookup_meta_record(sourceId, sourceIdType):
         logger.log_text(metaId)
 
     except Exception as e:
-        logger.exception(e.__str__())
+        logger.log_text(e.__str__())
         return e
    
     return metaId
@@ -862,7 +893,7 @@ def insert_lookup_record(metaRecordId, projectId):
         db.commit()
         db.close()
     except Exception as e:
-        logger.exception(e.__str__())
+        logger.log_text(e.__str__())
         return False
         
     return True
