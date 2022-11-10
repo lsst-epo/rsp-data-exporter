@@ -469,7 +469,7 @@ def download_zip(bucket_name, filename, file = None, data_type = None):
         if len(files) > max_objects_count:
             response.messages.append("Currently, a maximum of " + str(max_objects_count) + " objects is allowed per batch for your project - your batch has been has been truncated and anything in excess of " + str(max_objects_count) + " objects has been removed.")
             time_mark(debug, "Start of truncating excess files")
-            for f_file in files[max_objects_count:]:
+            for f_file in files[(max_objects_count + 1):]:
                 # response.messages.append("Removing file : " + unzipped_cutouts_dir + "/" + f_file)
                 os.remove(unzipped_cutouts_dir + "/" + f_file)
             time_mark(debug, "Truncating finished...")
@@ -540,7 +540,7 @@ def validate_project_metadata(email, vendor_project_id, vendor_batch_id = None):
     if validator.error == False:
         batch_id = check_batch_status(project_id, vendor_project_id) # To-do: Look into whether or not this would be a good time to check with Zoony on the status of the batches
 
-        if batch_id < 0:
+        if batch_id == None or batch_id < 0:
             # Create new batch record
             batchId = create_new_batch(project_id, vendor_batch_id)
 
@@ -668,10 +668,11 @@ def check_batch_status(project_id, vendor_project_id):
                 update_batch_record = True
             else:
                 logger.log_text("the length of project.links.subject_sets is > 0! : " + str(len(list(project.links.subject_sets))))
-                    
+                found_subject_set = False
                 for sub in list(project.links.subject_sets):
                     logger.log_text("looping through project.links.subject_sets")
                     if str(vendor_batch_id_db) == sub.id:
+                        logger.log_text("Found the subject set in question!")
                         for completeness_key in sub.completeness:
                             if sub.completeness[completeness_key] == 1.0:
                                 update_batch_record = True
@@ -703,7 +704,12 @@ def check_batch_status(project_id, vendor_project_id):
                                     validator.edc_logger_notes = json.dumps(logger_notes)
                                     response.status = "error"
                                     response.messages.append("You have an active, but empty subject set on the zooniverse platform with an ID of " + str(vendor_batch_id_db) + ". Please delete this subject set on the Zoonivese platform and try again.")
-                                    return  
+                                    return 
+                    if found_subject_set == False:
+                        logger.log_text("The subject set in question was NEVER found!")
+                        update_batch_record = True
+                        batch_id = -1
+
         if update_batch_record == True:
             batch_record.batch_status = "COMPLETE"
             db.commit()
@@ -756,10 +762,6 @@ def lookup_project_record(vendorProjectId):
 
         logger.log_text("about to execute query in lookup_project_record")
         results = db.execute(stmt)
-        
-
-        logger.log_text("about to log results object info")
-        logger.log_text(str(dir(results)))
 
         logger.log_text("about to loop through results")
         for row in results.scalars():
