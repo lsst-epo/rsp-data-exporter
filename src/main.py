@@ -672,13 +672,21 @@ def check_batch_status(project_id, vendor_project_id):
                 for sub in list(project.links.subject_sets):
                     logger.log_text("looping through project.links.subject_sets")
                     if str(vendor_batch_id_db) == sub.id:
+
+
+
+
                         logger.log_text("Found the subject set in question!")
+                        found_subject_set = True
                         for completeness_key in sub.completeness:
                             if sub.completeness[completeness_key] == 1.0:
+                                logger.log_text("subject set IS COMPLETE!!")
                                 update_batch_record = True
+                                break
                             else:
                                 # Found the batch, but it's not complete, check if it contains subjects or not
                                 try:
+                                    logger.log_text("subject set is NOT complete!!")
                                     first = next(subject_set_list[0].subjects)
                                     if first is not None:
                                         # Active batch with subjects, return
@@ -705,10 +713,14 @@ def check_batch_status(project_id, vendor_project_id):
                                     response.status = "error"
                                     response.messages.append("You have an active, but empty subject set on the zooniverse platform with an ID of " + str(vendor_batch_id_db) + ". Please delete this subject set on the Zoonivese platform and try again.")
                                     return 
-                    if found_subject_set == False:
-                        logger.log_text("The subject set in question was NEVER found!")
-                        update_batch_record = True
-                        batch_id = -1
+                        break
+
+
+
+                if found_subject_set == False:
+                    logger.log_text("The subject set in question was NEVER found!")
+                    update_batch_record = True
+                    batch_id = -1
 
         if update_batch_record == True:
             batch_record.batch_status = "COMPLETE"
