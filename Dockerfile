@@ -50,7 +50,7 @@ RUN python3.9 -m venv /tmp/venv
 RUN python3.9 -m pip install --no-cache-dir -r requirements.txt
 # RUN python3.9 -m pip install lsst-daf-butler
 
-WORKDIR /opt/lsst/software/server/src
+WORKDIR /opt/lsst/software/server/src/rsp_data_exporter
 
 USER lsst
 
