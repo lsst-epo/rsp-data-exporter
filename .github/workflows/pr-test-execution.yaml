@@ -40,7 +40,7 @@ jobs:
     
     # Recreate DB
     - name: Create DB
-      run: psql -U postgres -d astro_artifacts < ./test/db/astro_artifacts_schema.sql
+      run: psql -h 127.0.0.1 -U postgres -d astro_artifacts < ./test/db/astro_artifacts_schema.sql
 
     # gCloud CLI setup
     # - name: Login to GCP
