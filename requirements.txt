@@ -10,3 +10,4 @@ psycopg2-binary
 google-cloud-logging
 lsst-resources[s3]
 lsst-daf-butler
+pytest-dotenv

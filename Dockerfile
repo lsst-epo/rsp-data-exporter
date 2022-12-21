@@ -31,7 +31,6 @@ RUN mkdir /home/lsst/.lsst/
 COPY ./db-auth.yaml /home/lsst/.lsst/db-auth.yaml
 
 WORKDIR /home/lsst/.lsst/
-RUN echo "rosas"
 RUN ls -l
 RUN cat ./db-auth.yaml
 USER root

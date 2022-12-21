@@ -1,8 +1,10 @@
 import os, fnmatch, json, subprocess, csv, shutil, time, logging as py_logging, threading, glob
 from tokenize import tabsize
 from unicodedata import category # for debugging
-from models.citizen_science.citizen_science_validator import CitizenScienceValidator
-from models.data_exporter_response import DataExporterResponse
+from .models.citizen_science.citizen_science_validator import CitizenScienceValidator
+# from .models import citizen_science
+# from citizen_science_validator import CitizenScienceValidator
+from .models.data_exporter_response import DataExporterResponse
 from flask import Flask, request, Response
 from google.cloud import storage
 import panoptes_client
@@ -12,16 +14,16 @@ from sqlalchemy import select, update
 import numpy as np
 # Imports the Cloud Logging client library
 from google.cloud import logging
-import lsst.daf.butler as dafButler
-from models.citizen_science.citizen_science_batches import CitizenScienceBatches
-from models.citizen_science.citizen_science_projects import CitizenScienceProjects
-from models.citizen_science.citizen_science_owners import CitizenScienceOwners
-from models.citizen_science.citizen_science_meta import CitizenScienceMeta
-from models.citizen_science.citizen_science_proj_meta_lookup import CitizenScienceProjMetaLookup
-from models.data_release.data_release_diaobjects import DataReleaseDiaObjects
-from models.data_release.data_release_objects import DataReleaseObjects
-from models.data_release.data_release_forcedsources import DataReleaseForcedSources
-from models.edc_logger import EdcLogger
+# import lsst.daf.butler as dafButler
+from .models.citizen_science.citizen_science_batches import CitizenScienceBatches
+from .models.citizen_science.citizen_science_projects import CitizenScienceProjects
+from .models.citizen_science.citizen_science_owners import CitizenScienceOwners
+from .models.citizen_science.citizen_science_meta import CitizenScienceMeta
+from .models.citizen_science.citizen_science_proj_meta_lookup import CitizenScienceProjMetaLookup
+from .models.data_release.data_release_diaobjects import DataReleaseDiaObjects
+from .models.data_release.data_release_objects import DataReleaseObjects
+from .models.data_release.data_release_forcedsources import DataReleaseForcedSources
+from .models.edc_logger import EdcLogger
 
 app = Flask(__name__)
 
@@ -34,14 +36,16 @@ DB_PASS = os.environ['DB_PASS']
 DB_NAME = os.environ['DB_NAME']
 DB_HOST = os.environ['DB_HOST']
 DB_PORT = os.environ['DB_PORT']
+TEST_ONLY = os.environ['TEST_ONLY'] if os.environ['TEST_ONLY'] else False
 db = None
 CLOSED_PROJECT_STATUSES = ["COMPLETE", "CANCELLED", "ABANDONED"]
 BAD_OWNER_STATUSES = ["BLOCKED", "DISABLED"]
 
 # Instantiates the logging client
-logging_client = logging.Client()
-log_name = "rsp-data-exporter"
-logger = logging_client.logger(log_name)
+if TEST_ONLY == False:
+    logging_client = logging.Client()
+    log_name = "rsp-data-exporter"
+    logger = logging_client.logger(log_name)
 response = DataExporterResponse()
 validator = CitizenScienceValidator()
 debug = False
@@ -549,6 +553,7 @@ def validate_project_metadata(email, vendor_project_id, vendor_batch_id = None):
             batchId = create_new_batch(project_id, vendor_batch_id)
 
             if(batchId > 0):
+                validator.batch_id = batchId
                 return True
             else:
                 return False
@@ -914,7 +919,7 @@ def insert_meta_record(uri, sourceId, sourceIdType, projectId):
     global debug, validator
 
     # Temp hardcoded variables
-    edcVerId = 11000222
+    edcVerId = round(time.time() * 1000)
     public = True
 
     errorOccurred = False;
@@ -925,7 +930,7 @@ def insert_meta_record(uri, sourceId, sourceIdType, projectId):
         db.commit()
         db.close()
         metaRecordId = citizen_science_meta_record.cit_sci_meta_id
-        errorOccurred = True if insert_lookup_record(metaRecordId, validator.project_id) else False
+        errorOccurred = True if insert_lookup_record(metaRecordId, validator.project_id, validator.batch_id) else False
 
         logger.log_text("about to log metaRecordId")
         logger.log_text(metaRecordId)
@@ -934,14 +939,14 @@ def insert_meta_record(uri, sourceId, sourceIdType, projectId):
         # Is the exception because of a duplicate key error? If so, lookup the ID of the meta record and perform the insert into the lookup table
         if "non_dup_records" in e.__str__():
             metaId = lookup_meta_record(sourceId, sourceIdType)
-            return insert_lookup_record(metaId, validator.project_id)
+            return insert_lookup_record(metaId, validator.project_id, validator.batch_id)
         return False
     return errorOccurred
 
-def insert_lookup_record(metaRecordId, projectId):
+def insert_lookup_record(metaRecordId, projectId, batchId):
     try:
         db = CitizenScienceProjMetaLookup.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-        citizen_science_proj_meta_lookup_record = CitizenScienceProjMetaLookup(cit_sci_proj_id=projectId, cit_sci_meta_id=metaRecordId)
+        citizen_science_proj_meta_lookup_record = CitizenScienceProjMetaLookup(cit_sci_proj_id=projectId, cit_sci_meta_id=metaRecordId, cut_sci_batch_id=batchId)
         db.add(citizen_science_proj_meta_lookup_record)
         db.commit()
         db.close()
