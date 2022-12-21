@@ -38,11 +38,19 @@ jobs:
     - name: List dir
       run: ls
     
-    # Recreate DB
     - name: Create DB
       env:
         PGPASSWORD: postgres
       run: psql -h 127.0.0.1 -U postgres -d astro_artifacts < ./test/db/astro_artifacts_schema.sql
+
+    - name: Install python dependencies from requirements.txt
+      run: python3.9 -m pip install --no-cache-dir -r requirements.txt
+
+    - name: Install python dependencies from requirements.txt
+      run: pip install -e .
+
+    - name: Execute unit tests
+      run: pytest test/tests.py
 
     # gCloud CLI setup
     # - name: Login to GCP
