@@ -43,11 +43,14 @@ jobs:
         PGPASSWORD: postgres
       run: psql -h 127.0.0.1 -U postgres -d astro_artifacts < ./test/db/astro_artifacts_schema.sql
 
-    - name: Install python dependencies from requirements.txt
-      run: pip install --no-cache-dir -r requirements.txt
-      # run: python3.9 -m pip install --no-cache-dir -r requirements.txt
+    - name: Create virtual env
+      run: python3 -m venv env && source ./env/bin/activate 
 
     - name: Install python dependencies from requirements.txt
+      run: python3 -m pip install --no-cache-dir -r requirements.txt
+      # run: python3.9 -m pip install --no-cache-dir -r requirements.txt
+
+    - name: Install discoverable subpackages
       run: pip install -e .
 
     - name: Execute unit tests
