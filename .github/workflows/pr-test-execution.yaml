@@ -54,7 +54,7 @@ jobs:
       run: source ./env/bin/activate && pip install -e .
 
     - name: Execute unit tests
-      run: pytest test/tests.py
+      run: source ./env/bin/activate && pytest test/tests.py
 
     # gCloud CLI setup
     # - name: Login to GCP
