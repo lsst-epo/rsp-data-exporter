@@ -1,10 +1,10 @@
 import os, fnmatch, json, subprocess, csv, shutil, time, logging as py_logging, threading, glob
 from tokenize import tabsize
 from unicodedata import category # for debugging
-from ..models.citizen_science.citizen_science_validator import CitizenScienceValidator
+from .models.citizen_science.citizen_science_validator import CitizenScienceValidator
 # from .models import citizen_science
 # from citizen_science_validator import CitizenScienceValidator
-from ..models.data_exporter_response import DataExporterResponse
+from .models.data_exporter_response import DataExporterResponse
 from flask import Flask, request, Response
 from google.cloud import storage
 import panoptes_client
@@ -15,15 +15,15 @@ import numpy as np
 # Imports the Cloud Logging client library
 from google.cloud import logging
 # import lsst.daf.butler as dafButler
-from ..models.citizen_science.citizen_science_batches import CitizenScienceBatches
-from ..models.citizen_science.citizen_science_projects import CitizenScienceProjects
-from ..models.citizen_science.citizen_science_owners import CitizenScienceOwners
-from ..models.citizen_science.citizen_science_meta import CitizenScienceMeta
-from ..models.citizen_science.citizen_science_proj_meta_lookup import CitizenScienceProjMetaLookup
-from ..models.data_release.data_release_diaobjects import DataReleaseDiaObjects
-from ..models.data_release.data_release_objects import DataReleaseObjects
-from ..models.data_release.data_release_forcedsources import DataReleaseForcedSources
-from ..models.edc_logger import EdcLogger
+from .models.citizen_science.citizen_science_batches import CitizenScienceBatches
+from .models.citizen_science.citizen_science_projects import CitizenScienceProjects
+from .models.citizen_science.citizen_science_owners import CitizenScienceOwners
+from .models.citizen_science.citizen_science_meta import CitizenScienceMeta
+from .models.citizen_science.citizen_science_proj_meta_lookup import CitizenScienceProjMetaLookup
+from .models.data_release.data_release_diaobjects import DataReleaseDiaObjects
+from .models.data_release.data_release_objects import DataReleaseObjects
+from .models.data_release.data_release_forcedsources import DataReleaseForcedSources
+from .models.edc_logger import EdcLogger
 
 app = Flask(__name__)
 
