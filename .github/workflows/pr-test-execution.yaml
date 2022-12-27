@@ -35,8 +35,15 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v2
 
-    - name: List dir
-      run: ls
+    - name: Login to GCP
+      uses: google-github-actions/setup-gcloud@v0
+      with:
+        service_account_key: ${{ secrets.DEV_SA_KEY }}
+        project_id: skyviewer
+        export_default_credentials: true
+    
+    - name: Get env
+      run: gcloud secrets versions access latest --secret=rsp-data-exporter-unit-test-config > .env
     
     - name: Create DB
       env:
