@@ -930,12 +930,15 @@ def insert_meta_record(uri, sourceId, sourceIdType, projectId):
         db.commit()
         db.close()
         metaRecordId = citizen_science_meta_record.cit_sci_meta_id
+        logger.log_text("About to call insert_lookup_record() the usual way in the try block")
         errorOccurred = True if insert_lookup_record(metaRecordId, validator.project_id, validator.batch_id) else False
-
+        logger.log_text("errorOccurred:")
+        logger.log_text(str(errorOccurred))
         logger.log_text("about to log metaRecordId")
         logger.log_text(metaRecordId)
 
     except Exception as e:
+
         # Is the exception because of a duplicate key error? If so, lookup the ID of the meta record and perform the insert into the lookup table
         if "non_dup_records" in e.__str__():
             metaId = lookup_meta_record(sourceId, sourceIdType)
@@ -944,6 +947,7 @@ def insert_meta_record(uri, sourceId, sourceIdType, projectId):
     return errorOccurred
 
 def insert_lookup_record(metaRecordId, projectId, batchId):
+    logger.log_text("About to insert lookup record")
     try:
         db = CitizenScienceProjMetaLookup.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
         citizen_science_proj_meta_lookup_record = CitizenScienceProjMetaLookup(cit_sci_proj_id=projectId, cit_sci_meta_id=metaRecordId, cut_sci_batch_id=batchId)
@@ -951,6 +955,7 @@ def insert_lookup_record(metaRecordId, projectId, batchId):
         db.commit()
         db.close()
     except Exception as e:
+        logger.log_text("An exception occurred while trying to insert meta record!!")
         logger.log_text(e.__str__())
         return False
         
