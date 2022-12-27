@@ -2,7 +2,7 @@
 addopts = [
     "--import-mode=importlib",
 ]
-# pythonpath = "src"
+pythonpath = "src"
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
