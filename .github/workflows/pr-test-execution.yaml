@@ -54,7 +54,7 @@ jobs:
       run: source ./env/bin/activate && pip install -e .
 
     - name: Execute unit tests
-      run: python -m pytest test/
+      run: python -m pytest test/tests.py
     #  run: pytest test/tests.py
     #  run: source ./env/bin/activate && pip install -e . && python3 -m pytest test/tests.py
 
