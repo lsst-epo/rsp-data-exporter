@@ -41,7 +41,7 @@ jobs:
     - name: Create DB
       env:
         PGPASSWORD: postgres
-      run: psql -h 127.0.0.1 -U postgres -d astro_artifacts < ./test/db/astro_artifacts_schema.sql
+      run: psql -h 127.0.0.1 -U postgres -d astro_artifacts < ./tests/db/astro_artifacts_schema.sql
 
     - name: Create virtual env
       run: python3 -m venv env && source ./env/bin/activate 
