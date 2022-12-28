@@ -688,7 +688,7 @@ def check_batch_status(project_id, vendor_project_id):
 
         logger.log_text("about to evaluate batch_id after checking the DB")
         # if batch_id > 0: # An active batch record was found in the DB
-        if len(batches_in_db) > 0:
+        if len(batches_in_db) > 0 and TEST_ONLY == False:
             logger.log_text("# of active batches found in DB: " + str(len(batches_in_db)))
             # Call the Zooniverse API to get all subject sets for the project
             project = Project.find(int(vendor_project_id))
