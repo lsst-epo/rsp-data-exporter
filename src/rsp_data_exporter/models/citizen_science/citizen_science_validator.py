@@ -5,7 +5,8 @@ class CitizenScienceValidator():
     data_rights_approved = False
     excess_data_approved = False
     active_batch = False
-    project_id = None
+    project_id = None # EDC project ID
+    batch_id = None # EDC batch ID
     log_to_edc = False
     edc_logger_notes = ""
     edc_logger_category = ""

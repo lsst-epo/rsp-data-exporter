@@ -1,0 +1,62 @@
+name: 'Test Execution Validation'
+
+on:
+  pull_request:
+    types:
+      - 'opened'
+      - 'synchronize'
+      - 'reopened'
+      - 'closed'
+    branches:
+      - '**'
+
+jobs:
+  build-push-deploy:
+    name: 'Execute Test Cases'
+    runs-on: ubuntu-latest
+    if: ${{ (github.event.action != 'closed' == true) }}
+
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: astro_artifacts
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Login to GCP
+      uses: google-github-actions/setup-gcloud@v0
+      with:
+        service_account_key: ${{ secrets.DEV_SA_KEY }}
+        project_id: skyviewer
+        export_default_credentials: true
+    
+    - name: Get env
+      run: gcloud secrets versions access latest --secret=rsp-data-exporter-unit-test-config > .env && echo "GOOGLE_APPLICATION_CREDENTIALS=${{ secrets.DEV_SA_KEY }}" >> .env
+    
+    - name: Create DB
+      env:
+        PGPASSWORD: postgres
+      run: psql -h 127.0.0.1 -U postgres -d astro_artifacts < ./tests/db/astro_artifacts_schema.sql
+
+    - name: Create virtual env
+      run: python3 -m venv env && source ./env/bin/activate 
+
+    - name: Install python dependencies from requirements.txt
+      run: export SYSTEM_VERSION_COMPAT=1 && python3 -m pip install --no-cache-dir -r requirements.txt
+
+    - name: Install discoverable subpackages
+      run: source ./env/bin/activate && pip install -e .
+
+    - name: Execute unit tests
+      run: python -m pytest tests/

@@ -28,7 +28,7 @@ jobs:
 
     # gcloud CLI setup
     - name: Login to GCP
-      uses: google-github-actions/setup-gcloud@master
+      uses: google-github-actions/setup-gcloud@main
       with:
         service_account_key: ${{ secrets.DEV_SA_KEY }}
         project_id: skyviewer
@@ -89,7 +89,7 @@ jobs:
     steps:
       # gcloud CLI setup
     - name: Login to GCP
-      uses: google-github-actions/setup-gcloud@master
+      uses: google-github-actions/setup-gcloud@main
       with:
         service_account_key: ${{ secrets.DEV_SA_KEY }}
         project_id: skyviewer

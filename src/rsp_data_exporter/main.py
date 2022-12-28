@@ -1,8 +1,48 @@
 import os, fnmatch, json, subprocess, csv, shutil, time, logging as py_logging, threading, glob
 from tokenize import tabsize
 from unicodedata import category # for debugging
-from models.citizen_science.citizen_science_validator import CitizenScienceValidator
-from models.data_exporter_response import DataExporterResponse
+from google.cloud import logging
+
+TEST_ONLY = bool(os.environ.get('TEST_ONLY'))
+
+if TEST_ONLY == True:
+    # Instantiates the logging client
+    logging_client = logging.Client()
+    log_name = "rsp-data-exporter"
+    logger = logging_client.logger(log_name)
+
+# Try to import the code relatively, which works fine when running live, but doesn't work for
+# running unit tests with Pytest, so accommodate for both scenarios:
+try:
+    from .models.citizen_science.citizen_science_validator import CitizenScienceValidator
+    from .models.data_exporter_response import DataExporterResponse
+    from .models.citizen_science.citizen_science_batches import CitizenScienceBatches
+    from .models.citizen_science.citizen_science_projects import CitizenScienceProjects
+    from .models.citizen_science.citizen_science_owners import CitizenScienceOwners
+    from .models.citizen_science.citizen_science_meta import CitizenScienceMeta
+    from .models.citizen_science.citizen_science_proj_meta_lookup import CitizenScienceProjMetaLookup
+    from .models.data_release.data_release_diaobjects import DataReleaseDiaObjects
+    from .models.data_release.data_release_objects import DataReleaseObjects
+    from .models.data_release.data_release_forcedsources import DataReleaseForcedSources
+    from .models.edc_logger import EdcLogger
+except:
+    try:
+        from models.citizen_science.citizen_science_validator import CitizenScienceValidator
+        from models.data_exporter_response import DataExporterResponse
+        from models.citizen_science.citizen_science_batches import CitizenScienceBatches
+        from models.citizen_science.citizen_science_projects import CitizenScienceProjects
+        from models.citizen_science.citizen_science_owners import CitizenScienceOwners
+        from models.citizen_science.citizen_science_meta import CitizenScienceMeta
+        from models.citizen_science.citizen_science_proj_meta_lookup import CitizenScienceProjMetaLookup
+        from models.data_release.data_release_diaobjects import DataReleaseDiaObjects
+        from models.data_release.data_release_objects import DataReleaseObjects
+        from models.data_release.data_release_forcedsources import DataReleaseForcedSources
+        from models.edc_logger import EdcLogger
+    except Exception as e:
+        if TEST_ONLY == True:
+            logger.log_text("An error occurred while attempting to import subpackages!")
+            logger.log_text(e.__str__())        
+
 from flask import Flask, request, Response
 from google.cloud import storage
 import panoptes_client
@@ -10,21 +50,11 @@ from panoptes_client import Panoptes, Project, SubjectSet
 import sqlalchemy
 from sqlalchemy import select, update
 import numpy as np
-# Imports the Cloud Logging client library
-from google.cloud import logging
-import lsst.daf.butler as dafButler
-from models.citizen_science.citizen_science_batches import CitizenScienceBatches
-from models.citizen_science.citizen_science_projects import CitizenScienceProjects
-from models.citizen_science.citizen_science_owners import CitizenScienceOwners
-from models.citizen_science.citizen_science_meta import CitizenScienceMeta
-from models.citizen_science.citizen_science_proj_meta_lookup import CitizenScienceProjMetaLookup
-from models.data_release.data_release_diaobjects import DataReleaseDiaObjects
-from models.data_release.data_release_objects import DataReleaseObjects
-from models.data_release.data_release_forcedsources import DataReleaseForcedSources
-from models.edc_logger import EdcLogger
+# import lsst.daf.butler as dafButler
 
 app = Flask(__name__)
-
+response = DataExporterResponse()
+validator = CitizenScienceValidator()
 CLOUD_STORAGE_BUCKET = os.environ['CLOUD_STORAGE_BUCKET']
 CLOUD_STORAGE_BUCKET_HIPS2FITS = os.environ['CLOUD_STORAGE_BUCKET_HIPS2FITS']
 CLOUD_STORAGE_CIT_SCI_URL_PREFIX = os.environ["CLOUD_STORAGE_CIT_SCI_URL_PREFIX"]
@@ -37,18 +67,14 @@ DB_PORT = os.environ['DB_PORT']
 db = None
 CLOSED_PROJECT_STATUSES = ["COMPLETE", "CANCELLED", "ABANDONED"]
 BAD_OWNER_STATUSES = ["BLOCKED", "DISABLED"]
-
-# Instantiates the logging client
-logging_client = logging.Client()
-log_name = "rsp-data-exporter"
-logger = logging_client.logger(log_name)
-response = DataExporterResponse()
-validator = CitizenScienceValidator()
 debug = False
 urls = []
 
-def test_function():
-    return "eric"
+def check_test_only_var():
+    print("inside of check_test_only_var!")
+    print(os.environ["TEST_ONLY"])
+    print(type(os.environ["TEST_ONLY"]))
+    return TEST_ONLY
 
 @app.route("/citizen-science-butler-test")
 def new_butler_test():
@@ -187,14 +213,15 @@ def upload_csv(csv_path):
     logger.log_text(blob.public_url)
     return blob.public_url
 
-def create_csv_records(csv_path, csv_url, data_type):
-    csv_file = open(csv_path, "rU")
-    reader = csv.reader(csv_file, delimiter=',')
-    logger.log_text("about to loop CSV file contents in upload_csv")
-    line_count = 0 # relevant to data rights approval limits, and zooniverse business rules for transfer thresholds
-    for row in reader:
-        logger.log_text(str(row))
-    return
+# erosas: I don't think this is needed
+# def create_csv_records(csv_path, csv_url, data_type):
+#     csv_file = open(csv_path, "rU")
+#     reader = csv.reader(csv_file, delimiter=',')
+#     logger.log_text("about to loop CSV file contents in upload_csv")
+#     line_count = 0 # relevant to data rights approval limits, and zooniverse business rules for transfer thresholds
+#     for row in reader:
+#         logger.log_text(str(row))
+#     return
 
 def create_dr_forcedsource_records(csv_path, csv_url):
     csv_file = open(csv_path, "rU")
@@ -549,6 +576,7 @@ def validate_project_metadata(email, vendor_project_id, vendor_batch_id = None):
             batchId = create_new_batch(project_id, vendor_batch_id)
 
             if(batchId > 0):
+                validator.batch_id = batchId
                 return True
             else:
                 return False
@@ -616,15 +644,10 @@ def create_new_batch(project_id, vendor_batch_id):
         citizen_science_batch_record = CitizenScienceBatches(cit_sci_proj_id=project_id, vendor_batch_id=vendor_batch_id, batch_status='ACTIVE')    
         db.add(citizen_science_batch_record)
         
-        # logger.log_text("### about to commit()")
         db.commit()
-        # logger.log_text("### about to expunge_all()")
         db.expunge_all()
-        # logger.log_text("### about to close()")
         db.close()
-        # logger.log_text("### about to assign batch id")
         batchId = citizen_science_batch_record.cit_sci_batch_id
-        # logger.log_text("### about to log batchId")
         logger.log_text("new batch id: " + str(batchId))
     except Exception as e:
         logger.log_text("An exception occurred while trying to create a new batch!:")
@@ -664,8 +687,7 @@ def check_batch_status(project_id, vendor_project_id):
         db.commit()
 
         logger.log_text("about to evaluate batch_id after checking the DB")
-        # if batch_id > 0: # An active batch record was found in the DB
-        if len(batches_in_db) > 0:
+        if len(batches_in_db) > 0 and TEST_ONLY == False:
             logger.log_text("# of active batches found in DB: " + str(len(batches_in_db)))
             # Call the Zooniverse API to get all subject sets for the project
             project = Project.find(int(vendor_project_id))
@@ -760,6 +782,11 @@ def check_batch_status(project_id, vendor_project_id):
                     batch_in_db["batch_record"].batch_status = "COMPLETE"
                     db.commit()
                     # batch_id = -1
+        elif TEST_ONLY == True:
+            for batch in batches_in_db:
+                batches_still_active.append({
+                    "batch_record" : batch})
+
     except Exception as e:
         logger.log_text("about to log exception in check_batch_status!")
         logger.log_text(e.__str__())
@@ -767,7 +794,6 @@ def check_batch_status(project_id, vendor_project_id):
         validator.error = True
         response.status = "error"
         response.messages.append("An error occurred while attempting to lookup your batch records - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
-        # return batches_still_active
 
     db.close()
 
@@ -914,7 +940,7 @@ def insert_meta_record(uri, sourceId, sourceIdType, projectId):
     global debug, validator
 
     # Temp hardcoded variables
-    edcVerId = 11000222
+    edcVerId = round(time.time() * 1000)
     public = True
 
     errorOccurred = False;
@@ -925,27 +951,32 @@ def insert_meta_record(uri, sourceId, sourceIdType, projectId):
         db.commit()
         db.close()
         metaRecordId = citizen_science_meta_record.cit_sci_meta_id
-        errorOccurred = True if insert_lookup_record(metaRecordId, validator.project_id) else False
-
+        logger.log_text("About to call insert_lookup_record() the usual way in the try block")
+        errorOccurred = True if insert_lookup_record(metaRecordId, validator.project_id, validator.batch_id) else False
+        logger.log_text("errorOccurred:")
+        logger.log_text(str(errorOccurred))
         logger.log_text("about to log metaRecordId")
         logger.log_text(metaRecordId)
 
     except Exception as e:
+
         # Is the exception because of a duplicate key error? If so, lookup the ID of the meta record and perform the insert into the lookup table
         if "non_dup_records" in e.__str__():
             metaId = lookup_meta_record(sourceId, sourceIdType)
-            return insert_lookup_record(metaId, validator.project_id)
+            return insert_lookup_record(metaId, validator.project_id, validator.batch_id)
         return False
     return errorOccurred
 
-def insert_lookup_record(metaRecordId, projectId):
+def insert_lookup_record(metaRecordId, projectId, batchId):
+    logger.log_text("About to insert lookup record")
     try:
         db = CitizenScienceProjMetaLookup.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-        citizen_science_proj_meta_lookup_record = CitizenScienceProjMetaLookup(cit_sci_proj_id=projectId, cit_sci_meta_id=metaRecordId)
+        citizen_science_proj_meta_lookup_record = CitizenScienceProjMetaLookup(cit_sci_proj_id=projectId, cit_sci_meta_id=metaRecordId, cut_sci_batch_id=batchId)
         db.add(citizen_science_proj_meta_lookup_record)
         db.commit()
         db.close()
     except Exception as e:
+        logger.log_text("An exception occurred while trying to insert meta record!!")
         logger.log_text(e.__str__())
         return False
         

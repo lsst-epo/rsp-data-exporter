@@ -4,3 +4,7 @@ __pycache__/
 butler.yaml
 test.py
 test.csv
+.env
+env/
+.vscode/
+key.json
