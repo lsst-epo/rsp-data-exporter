@@ -1,10 +1,54 @@
 import os, fnmatch, json, subprocess, csv, shutil, time, logging as py_logging, threading, glob
 from tokenize import tabsize
 from unicodedata import category # for debugging
-from .models.citizen_science.citizen_science_validator import CitizenScienceValidator
-# from .models import citizen_science
-# from citizen_science_validator import CitizenScienceValidator
-from .models.data_exporter_response import DataExporterResponse
+from google.cloud import logging
+
+response = DataExporterResponse()
+validator = CitizenScienceValidator()
+TEST_ONLY = False
+try:
+    TEST_ONLY = os.environ['TEST_ONLY'] if os.environ['TEST_ONLY'] else False
+except:
+    pass
+
+if TEST_ONLY == True:
+    # Instantiates the logging client
+    logging_client = logging.Client()
+    log_name = "rsp-data-exporter"
+    logger = logging_client.logger(log_name)
+
+# Try to import the code relatively, which works fine when running live, but doesn't work for
+# running unit tests with Pytest, so accommodate for both scenarios:
+try:
+    from .models.citizen_science.citizen_science_validator import CitizenScienceValidator
+    from .models.data_exporter_response import DataExporterResponse
+    from .models.citizen_science.citizen_science_batches import CitizenScienceBatches
+    from .models.citizen_science.citizen_science_projects import CitizenScienceProjects
+    from .models.citizen_science.citizen_science_owners import CitizenScienceOwners
+    from .models.citizen_science.citizen_science_meta import CitizenScienceMeta
+    from .models.citizen_science.citizen_science_proj_meta_lookup import CitizenScienceProjMetaLookup
+    from .models.data_release.data_release_diaobjects import DataReleaseDiaObjects
+    from .models.data_release.data_release_objects import DataReleaseObjects
+    from .models.data_release.data_release_forcedsources import DataReleaseForcedSources
+    from .models.edc_logger import EdcLogger
+except:
+    try:
+        from models.citizen_science.citizen_science_validator import CitizenScienceValidator
+        from models.data_exporter_response import DataExporterResponse
+        from models.citizen_science.citizen_science_batches import CitizenScienceBatches
+        from models.citizen_science.citizen_science_projects import CitizenScienceProjects
+        from models.citizen_science.citizen_science_owners import CitizenScienceOwners
+        from models.citizen_science.citizen_science_meta import CitizenScienceMeta
+        from models.citizen_science.citizen_science_proj_meta_lookup import CitizenScienceProjMetaLookup
+        from models.data_release.data_release_diaobjects import DataReleaseDiaObjects
+        from models.data_release.data_release_objects import DataReleaseObjects
+        from models.data_release.data_release_forcedsources import DataReleaseForcedSources
+        from models.edc_logger import EdcLogger
+    except Exception as e:
+        if TEST_ONLY == True:
+            logger.log_text("An error occurred while attempting to import subpackages!")
+            logger.log_text(e.__str__())        
+
 from flask import Flask, request, Response
 from google.cloud import storage
 import panoptes_client
@@ -12,18 +56,7 @@ from panoptes_client import Panoptes, Project, SubjectSet
 import sqlalchemy
 from sqlalchemy import select, update
 import numpy as np
-# Imports the Cloud Logging client library
-from google.cloud import logging
 # import lsst.daf.butler as dafButler
-from .models.citizen_science.citizen_science_batches import CitizenScienceBatches
-from .models.citizen_science.citizen_science_projects import CitizenScienceProjects
-from .models.citizen_science.citizen_science_owners import CitizenScienceOwners
-from .models.citizen_science.citizen_science_meta import CitizenScienceMeta
-from .models.citizen_science.citizen_science_proj_meta_lookup import CitizenScienceProjMetaLookup
-from .models.data_release.data_release_diaobjects import DataReleaseDiaObjects
-from .models.data_release.data_release_objects import DataReleaseObjects
-from .models.data_release.data_release_forcedsources import DataReleaseForcedSources
-from .models.edc_logger import EdcLogger
 
 app = Flask(__name__)
 
@@ -36,23 +69,14 @@ DB_PASS = os.environ['DB_PASS']
 DB_NAME = os.environ['DB_NAME']
 DB_HOST = os.environ['DB_HOST']
 DB_PORT = os.environ['DB_PORT']
-TEST_ONLY = os.environ['TEST_ONLY'] if os.environ['TEST_ONLY'] else False
 db = None
 CLOSED_PROJECT_STATUSES = ["COMPLETE", "CANCELLED", "ABANDONED"]
 BAD_OWNER_STATUSES = ["BLOCKED", "DISABLED"]
-
-# Instantiates the logging client
-if TEST_ONLY == False:
-    logging_client = logging.Client()
-    log_name = "rsp-data-exporter"
-    logger = logging_client.logger(log_name)
-response = DataExporterResponse()
-validator = CitizenScienceValidator()
 debug = False
 urls = []
 
 def test_function():
-    return "eric"
+    return True
 
 @app.route("/citizen-science-butler-test")
 def new_butler_test():
@@ -191,14 +215,15 @@ def upload_csv(csv_path):
     logger.log_text(blob.public_url)
     return blob.public_url
 
-def create_csv_records(csv_path, csv_url, data_type):
-    csv_file = open(csv_path, "rU")
-    reader = csv.reader(csv_file, delimiter=',')
-    logger.log_text("about to loop CSV file contents in upload_csv")
-    line_count = 0 # relevant to data rights approval limits, and zooniverse business rules for transfer thresholds
-    for row in reader:
-        logger.log_text(str(row))
-    return
+# erosas: I don't think this is needed
+# def create_csv_records(csv_path, csv_url, data_type):
+#     csv_file = open(csv_path, "rU")
+#     reader = csv.reader(csv_file, delimiter=',')
+#     logger.log_text("about to loop CSV file contents in upload_csv")
+#     line_count = 0 # relevant to data rights approval limits, and zooniverse business rules for transfer thresholds
+#     for row in reader:
+#         logger.log_text(str(row))
+#     return
 
 def create_dr_forcedsource_records(csv_path, csv_url):
     csv_file = open(csv_path, "rU")
@@ -621,15 +646,10 @@ def create_new_batch(project_id, vendor_batch_id):
         citizen_science_batch_record = CitizenScienceBatches(cit_sci_proj_id=project_id, vendor_batch_id=vendor_batch_id, batch_status='ACTIVE')    
         db.add(citizen_science_batch_record)
         
-        # logger.log_text("### about to commit()")
         db.commit()
-        # logger.log_text("### about to expunge_all()")
         db.expunge_all()
-        # logger.log_text("### about to close()")
         db.close()
-        # logger.log_text("### about to assign batch id")
         batchId = citizen_science_batch_record.cit_sci_batch_id
-        # logger.log_text("### about to log batchId")
         logger.log_text("new batch id: " + str(batchId))
     except Exception as e:
         logger.log_text("An exception occurred while trying to create a new batch!:")

@@ -31,7 +31,6 @@ jobs:
           - 5432:5432
 
     steps:
-    # Checkout the repository to the GitHub Actions runner
     - name: Checkout
       uses: actions/checkout@v2
 
@@ -55,46 +54,9 @@ jobs:
 
     - name: Install python dependencies from requirements.txt
       run: export SYSTEM_VERSION_COMPAT=1 && python3 -m pip install --no-cache-dir -r requirements.txt
-      # run: python3.9 -m pip install --no-cache-dir -r requirements.txt
 
     - name: Install discoverable subpackages
       run: source ./env/bin/activate && pip install -e .
 
     - name: Execute unit tests
       run: python -m pytest tests/
-    #  run: pytest test/tests.py
-    #  run: source ./env/bin/activate && pip install -e . && python3 -m pytest test/tests.py
-
-    #  run: source ./env/bin/activate && pip install -e . && pytest test/tests.py
-
-    # gCloud CLI setup
-    # - name: Login to GCP
-    #   uses: google-github-actions/setup-gcloud@v0
-    #   with:
-    #     service_account_key: ${{ secrets.DEV_SA_KEY }}
-    #     project_id: skyviewer
-    #     export_default_credentials: true
-    
-    # Get secrets
-    # - name: Get env
-    #   run: gcloud secrets versions access latest --secret=craft-dam-plugin-env > ./tests/.env
-
-    # Composer install
-    # - name: Install Composer dependencies
-    #   uses: php-actions/composer@v6
-    #   with:
-    #     php_version: "7.4"
-    #     php_extensions: zip
-    #     command: install
-
-    # Get secrets
-    # - name: Use gCloud command to connect to SQL proxy
-    #   run: gcloud compute ssh db-client-1 --project=skyviewer --zone=us-central1-a -- -L 127.0.0.1:5432:10.109.176.5:5432 &
-
-    # Execute those tests
-    # - name: Execute tests
-    #   run: |-
-    #     php vendor/bin/codecept run unit
-      # uses: joelwmale/codeception-action@master
-      # env:
-      #   ENV_FILE: ./tests/.env

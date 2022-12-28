@@ -3,6 +3,11 @@ addopts = [
     "--import-mode=importlib",
 ]
 pythonpath = "src"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
+
