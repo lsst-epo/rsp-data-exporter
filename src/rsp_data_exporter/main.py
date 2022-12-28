@@ -784,11 +784,12 @@ def check_batch_status(project_id, vendor_project_id):
                     db.commit()
                     # batch_id = -1
         elif TEST_ONLY == True:
-            for row in results.scalars():
+            print("inside of check_batch_status() TEST_ONLY block")
+            for batch in batches_in_db:
                 batches_still_active.append({
-                    "batch_record" : row,
-                    "batch_id" : row.cit_sci_batch_id,
-                    "vendor_batch_id_db" : row.vendor_batch_id
+                    "batch_record" : batch,
+                    "batch_id" : batch.cit_sci_batch_id,
+                    "vendor_batch_id_db" : batch.vendor_batch_id
                 })
 
     except Exception as e:
