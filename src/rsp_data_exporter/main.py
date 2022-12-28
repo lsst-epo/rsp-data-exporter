@@ -788,8 +788,8 @@ def check_batch_status(project_id, vendor_project_id):
             for batch in batches_in_db:
                 batches_still_active.append({
                     "batch_record" : batch,
-                    "batch_id" : batch.cit_sci_batch_id,
-                    "vendor_batch_id_db" : batch.vendor_batch_id
+                    "batch_id" : batch["cit_sci_batch_id"],
+                    "vendor_batch_id_db" : batch["vendor_batch_id"]
                 })
             print("length of batches_still_active:")
             print(len(batches_still_active))
