@@ -791,6 +791,8 @@ def check_batch_status(project_id, vendor_project_id):
                     "batch_id" : batch.cit_sci_batch_id,
                     "vendor_batch_id_db" : batch.vendor_batch_id
                 })
+            print("length of batches_still_active:")
+            print(len(batches_still_active))
 
     except Exception as e:
         logger.log_text("about to log exception in check_batch_status!")
@@ -799,7 +801,6 @@ def check_batch_status(project_id, vendor_project_id):
         validator.error = True
         response.status = "error"
         response.messages.append("An error occurred while attempting to lookup your batch records - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
-        # return batches_still_active
 
     db.close()
 
