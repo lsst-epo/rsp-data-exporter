@@ -74,8 +74,8 @@ BAD_OWNER_STATUSES = ["BLOCKED", "DISABLED"]
 debug = False
 urls = []
 
-def test_function():
-    return True
+def check_test_only_var():
+    return TEST_ONLY
 
 @app.route("/citizen-science-butler-test")
 def new_butler_test():
