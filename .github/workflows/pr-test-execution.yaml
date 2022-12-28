@@ -42,7 +42,7 @@ jobs:
         export_default_credentials: true
     
     - name: Get env
-      run: gcloud secrets versions access latest --secret=rsp-data-exporter-unit-test-config > .env && service_key=${{ secrets.DEV_SA_KEY }} && echo "GOOGLE_APPLICATION_CREDENTIALS=${service_key}" >> .env
+      run: gcloud secrets versions access latest --secret=rsp-data-exporter-unit-test-config > .env && echo "GOOGLE_APPLICATION_CREDENTIALS=${${{ secrets.DEV_SA_KEY }}}" >> .env
     
     - name: Create DB
       env:
