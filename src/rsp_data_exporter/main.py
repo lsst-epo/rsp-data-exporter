@@ -3,11 +3,11 @@ from tokenize import tabsize
 from unicodedata import category # for debugging
 from google.cloud import logging
 
-TEST_ONLY = False
-try:
-    TEST_ONLY = os.environ['TEST_ONLY'] if os.environ['TEST_ONLY'] else False
-except:
-    pass
+TEST_ONLY = os.environ['TEST_ONLY'] or False
+# try:
+#     TEST_ONLY = os.environ['TEST_ONLY'] if os.environ['TEST_ONLY'] else False
+# except:
+#     pass
 
 if TEST_ONLY == True:
     # Instantiates the logging client
