@@ -687,7 +687,6 @@ def check_batch_status(project_id, vendor_project_id):
         db.commit()
 
         logger.log_text("about to evaluate batch_id after checking the DB")
-        # if batch_id > 0: # An active batch record was found in the DB
         if len(batches_in_db) > 0 and TEST_ONLY == False:
             logger.log_text("# of active batches found in DB: " + str(len(batches_in_db)))
             # Call the Zooniverse API to get all subject sets for the project
@@ -784,13 +783,9 @@ def check_batch_status(project_id, vendor_project_id):
                     db.commit()
                     # batch_id = -1
         elif TEST_ONLY == True:
-            print("inside of check_batch_status() TEST_ONLY block")
             for batch in batches_in_db:
                 batches_still_active.append({
                     "batch_record" : batch})
-            print("length of batches_still_active:")
-            print(len(batches_still_active))
-            print(str(batches_in_db))
 
     except Exception as e:
         logger.log_text("about to log exception in check_batch_status!")
