@@ -3,11 +3,7 @@ from tokenize import tabsize
 from unicodedata import category # for debugging
 from google.cloud import logging
 
-TEST_ONLY = os.environ['TEST_ONLY'] or False
-# try:
-#     TEST_ONLY = os.environ['TEST_ONLY'] if os.environ['TEST_ONLY'] else False
-# except:
-#     pass
+TEST_ONLY = bool(os.environ.get('TEST_ONLY'))
 
 if TEST_ONLY == True:
     # Instantiates the logging client
@@ -75,6 +71,9 @@ debug = False
 urls = []
 
 def check_test_only_var():
+    print("inside of check_test_only_var!")
+    print(os.environ["TEST_ONLY"])
+    print(type(os.environ["TEST_ONLY"]))
     return TEST_ONLY
 
 @app.route("/citizen-science-butler-test")

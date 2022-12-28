@@ -1,9 +1,9 @@
 # import unittest
-import pytest
-from dotenv import load_dotenv
-load_dotenv()
-from rsp_data_exporter import main
+import pytest, os
+from dotenv import load_dotenv, dotenv_values
 
+from rsp_data_exporter import main
+load_dotenv()
 
 # If pytest is working fine then this test will always execute successfully
 def test_sanity_check():
