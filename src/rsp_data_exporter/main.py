@@ -783,6 +783,14 @@ def check_batch_status(project_id, vendor_project_id):
                     batch_in_db["batch_record"].batch_status = "COMPLETE"
                     db.commit()
                     # batch_id = -1
+        elif TEST_ONLY == True:
+            for row in results.scalars():
+                batches_still_active.append({
+                    "batch_record" : row,
+                    "batch_id" : row.cit_sci_batch_id,
+                    "vendor_batch_id_db" : row.vendor_batch_id
+                })
+
     except Exception as e:
         logger.log_text("about to log exception in check_batch_status!")
         logger.log_text(e.__str__())
