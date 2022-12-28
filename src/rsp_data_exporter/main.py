@@ -3,8 +3,6 @@ from tokenize import tabsize
 from unicodedata import category # for debugging
 from google.cloud import logging
 
-response = DataExporterResponse()
-validator = CitizenScienceValidator()
 TEST_ONLY = False
 try:
     TEST_ONLY = os.environ['TEST_ONLY'] if os.environ['TEST_ONLY'] else False
@@ -59,7 +57,8 @@ import numpy as np
 # import lsst.daf.butler as dafButler
 
 app = Flask(__name__)
-
+response = DataExporterResponse()
+validator = CitizenScienceValidator()
 CLOUD_STORAGE_BUCKET = os.environ['CLOUD_STORAGE_BUCKET']
 CLOUD_STORAGE_BUCKET_HIPS2FITS = os.environ['CLOUD_STORAGE_BUCKET_HIPS2FITS']
 CLOUD_STORAGE_CIT_SCI_URL_PREFIX = os.environ["CLOUD_STORAGE_CIT_SCI_URL_PREFIX"]
