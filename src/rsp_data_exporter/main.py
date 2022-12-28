@@ -790,7 +790,7 @@ def check_batch_status(project_id, vendor_project_id):
                     "batch_record" : batch})
             print("length of batches_still_active:")
             print(len(batches_still_active))
-            print(str(batches_in_db.__dict__))
+            print(str(batches_in_db))
 
     except Exception as e:
         logger.log_text("about to log exception in check_batch_status!")
