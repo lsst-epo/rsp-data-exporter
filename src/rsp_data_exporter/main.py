@@ -5,7 +5,7 @@ from google.cloud import logging
 
 TEST_ONLY = bool(os.environ.get('TEST_ONLY'))
 
-if TEST_ONLY == True:
+if TEST_ONLY == False:
     # Instantiates the logging client
     logging_client = logging.Client()
     log_name = "rsp-data-exporter"
@@ -436,6 +436,9 @@ def upload_cutout_arr(cutouts, i):
         
 def insert_meta_records(urls, vendor_project_id):
     time_mark(debug, "Start of metadata record insertion")
+    logger.log_text("logging urls")
+    logger.log_text(str(urls))
+    logger.log_text("len(urls): " + str(len(urls)))
     for url in urls:
         insert_meta_record(url, str(round(time.time() * 1000)) , 'sourceId', vendor_project_id)
     time_mark(debug, "End of metadata record insertion")
@@ -945,38 +948,55 @@ def insert_meta_record(uri, sourceId, sourceIdType, projectId):
 
     errorOccurred = False;
     try:
+        # db = CitizenScienceBatches.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        # db.expire_on_commit = False
+        # citizen_science_batch_record = CitizenScienceBatches(cit_sci_proj_id=project_id, vendor_batch_id=vendor_batch_id, batch_status='ACTIVE')    
+        # db.add(citizen_science_batch_record)
+        
+        # db.commit()
+        # db.expunge_all()
+        # db.close()
         db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        db.expire_on_commit = False
         citizen_science_meta_record = CitizenScienceMeta(edc_ver_id=edcVerId, source_id=sourceId, source_id_type=sourceIdType, uri=uri, public=public)
         db.add(citizen_science_meta_record)
         db.commit()
+        db.expunge_all()
         db.close()
         metaRecordId = citizen_science_meta_record.cit_sci_meta_id
         logger.log_text("About to call insert_lookup_record() the usual way in the try block")
-        errorOccurred = True if insert_lookup_record(metaRecordId, validator.project_id, validator.batch_id) else False
+        # insert_lookup_success = insert_lookup_record(metaRecordId, validator.project_id, validator.batch_id)
+        errorOccurred = insert_lookup_record(metaRecordId, validator.project_id, validator.batch_id)
         logger.log_text("errorOccurred:")
         logger.log_text(str(errorOccurred))
         logger.log_text("about to log metaRecordId")
         logger.log_text(metaRecordId)
 
     except Exception as e:
-
+        logger.log_text("An exception occurred in insert_meta_record()")
         # Is the exception because of a duplicate key error? If so, lookup the ID of the meta record and perform the insert into the lookup table
         if "non_dup_records" in e.__str__():
+            logger.log_text("non_dup_record!")
             metaId = lookup_meta_record(sourceId, sourceIdType)
             return insert_lookup_record(metaId, validator.project_id, validator.batch_id)
+        else:
+            logger.log_text(e.__str__())
+            logger.log_text("NOT! non_dup_record!")
         return False
+    
     return errorOccurred
 
 def insert_lookup_record(metaRecordId, projectId, batchId):
     logger.log_text("About to insert lookup record")
     try:
-        db = CitizenScienceProjMetaLookup.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-        citizen_science_proj_meta_lookup_record = CitizenScienceProjMetaLookup(cit_sci_proj_id=projectId, cit_sci_meta_id=metaRecordId, cut_sci_batch_id=batchId)
-        db.add(citizen_science_proj_meta_lookup_record)
-        db.commit()
-        db.close()
+        db_l = CitizenScienceProjMetaLookup.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        db_l.expire_on_commit = False
+        citizen_science_proj_meta_lookup_record = CitizenScienceProjMetaLookup(cit_sci_proj_id=projectId, cit_sci_meta_id=metaRecordId, cit_sci_batch_id=batchId)
+        db_l.add(citizen_science_proj_meta_lookup_record)
+        db_l.commit()
+        db_l.close()
     except Exception as e:
-        logger.log_text("An exception occurred while trying to insert meta record!!")
+        logger.log_text("An exception occurred while trying to insert lookup record!!")
         logger.log_text(e.__str__())
         return False
         
