@@ -5,11 +5,11 @@ from google.cloud import logging
 
 TEST_ONLY = bool(os.environ.get('TEST_ONLY'))
 
-if TEST_ONLY == False:
+# if TEST_ONLY == False:
     # Instantiates the logging client
-    logging_client = logging.Client()
-    log_name = "rsp-data-exporter"
-    logger = logging_client.logger(log_name)
+logging_client = logging.Client()
+log_name = "rsp-data-exporter"
+logger = logging_client.logger(log_name)
 
 # Try to import the code relatively, which works fine when running live, but doesn't work for
 # running unit tests with Pytest, so accommodate for both scenarios:
