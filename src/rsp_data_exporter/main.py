@@ -4,9 +4,6 @@ from unicodedata import category # for debugging
 from google.cloud import logging
 
 TEST_ONLY = bool(os.environ.get('TEST_ONLY'))
-
-# if TEST_ONLY == False:
-    # Instantiates the logging client
 logging_client = logging.Client()
 log_name = "rsp-data-exporter"
 logger = logging_client.logger(log_name)
@@ -71,10 +68,69 @@ debug = False
 urls = []
 
 def check_test_only_var():
-    print("inside of check_test_only_var!")
-    print(os.environ["TEST_ONLY"])
-    print(type(os.environ["TEST_ONLY"]))
     return TEST_ONLY
+
+@app.route("/active-batch-metadata")
+def get_batch_metadata():
+    logger.log_text("get_batch_metadata:: Inside of get_batch_metadata!!!!")
+
+    vendor_project_id = request.args.get("vendor_project_id")
+    logger.log_text("get_batch_metadata:: vendor_project_id=" + str(vendor_project_id))
+
+    project_id = lookup_project_record(vendor_project_id)
+    logger.log_text("get_batch_metadata:: project_id=" + str(project_id))
+
+    # Clean up batches before fetching batch ID
+    check_batch_status(project_id, vendor_project_id)
+
+    # Fetch batch ID
+    batch_id = get_current_active_batch_id(project_id)
+    logger.log_text("get_batch_metadata:: batche_id = " + str(batch_id))
+
+    lookup_records = query_lookup_records(project_id, batch_id)
+    logger.log_text("get_batch_metadata:: lookup_records length = " + str(len(lookup_records)))
+    logger.log_text(str(lookup_records))
+
+    batch_metadata = []
+    for meta_id in lookup_records:
+        metadata = lookup_meta_record(None, None, meta_id)
+        # logger.log_text("get_batch_metadata:: metadata=" + str(metadata))
+        if len(metadata) > 0:
+            batch_metadata.append(metadata[0])
+    logger.log_text("get_batch_metadata:: lookup_records length=" + str(len(lookup_records)))
+    return json.dumps(batch_metadata)
+
+def get_current_active_batch_id(project_id):
+    db = CitizenScienceBatches.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+    stmt = select(CitizenScienceBatches).where(CitizenScienceBatches.cit_sci_proj_id == project_id).where(CitizenScienceBatches.batch_status == 'ACTIVE')
+    results = db.execute(stmt)
+    
+    logger.log_text("logging dir of results in get_current_active_batch_id:")
+    record = results.scalars().first()
+    logger.log_text(str(dir(record)))
+    logger.log_text("about to log results from within get_current_active_batch_id:")
+    
+    batch_id = record.cit_sci_batch_id
+    logger.log_text(str(batch_id))
+    #         for row in results.scalars():
+    # logger.log_text(str(results.first().cit_sci_batch_id))
+    return batch_id
+
+def query_lookup_records(project_id, batch_id):
+    logger.log_text("inside of query_lookup_records()")
+    logger.log_text("project_id: " + str(project_id))
+    logger.log_text("batch_id: " + str(batch_id))
+    db = CitizenScienceProjMetaLookup.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+    query = select(CitizenScienceProjMetaLookup).where(CitizenScienceProjMetaLookup.cit_sci_proj_id == project_id).where(CitizenScienceProjMetaLookup.cit_sci_batch_id == int(batch_id))
+    lookup_records = db.execute(query)
+    db.commit()
+    meta_ids = []
+    for row in lookup_records.scalars():
+        logger.log_text("looping through lookup results")
+        logger.log_text(str(row))
+        meta_ids.append(row.cit_sci_meta_id)
+    
+    return meta_ids
 
 @app.route("/citizen-science-butler-test")
 def new_butler_test():
@@ -910,7 +966,6 @@ def lookup_owner_record(emailP):
             response.status = "error"
             response.messages.append("You are not/no longer eligible to use the Rubin Science Platform to send data to Zooniverse.")
 
-                # return ownerId
         db.close()
     except Exception as e:
         validator.error = True
@@ -920,19 +975,38 @@ def lookup_owner_record(emailP):
    
     return ownerId
 
-def lookup_meta_record(sourceId, sourceIdType):
+def lookup_meta_record(sourceId, sourceIdType, meta_id = None):
+    meta_records = []
     try:
-        db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-        stmt = select(CitizenScienceMeta).where(CitizenScienceProjects.source_id == sourceId).where(CitizenScienceProjects.source_id_type == sourceIdType)
-        results = db.execute(stmt)
-        for row in results.scalars():
-            metaId = row.cit_sci_meta_id
+        if meta_id == None:
+            db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+            stmt = select(CitizenScienceMeta).where(CitizenScienceProjects.source_id == sourceId).where(CitizenScienceProjects.source_id_type == sourceIdType)
+            results = db.execute(stmt)
+            for row in results.scalars():
+                metaId = row.cit_sci_meta_id
 
-        db.close()
+            db.close()
 
-        logger.log_text("about to log metaId in lookup_meta_record()")
-        logger.log_text(metaId)
+            logger.log_text("about to log metaId (queried via sourceId/sourceIdType) in lookup_meta_record()")
+            logger.log_text(metaId)
+        else:
+            db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+            stmt = select(CitizenScienceMeta).where(CitizenScienceMeta.cit_sci_meta_id == meta_id)
+            results = db.execute(stmt)
+            for row in results.scalars():
+                meta_records.append({
+                    "edc_ver_id": row.edc_ver_id,
+                    "source_id": row.source_id,
+                    "source_id_type": row.source_id_type,
+                    "cutout_url": row.uri,
+                    "date_transferred": str(row.date_created)
+                })
 
+            db.close()
+
+            logger.log_text("about to log meta record count (queried by batch_id) in lookup_meta_record()")
+            logger.log_text(str(len(meta_records)))
+            return meta_records
     except Exception as e:
         logger.log_text(e.__str__())
         return e
@@ -948,14 +1022,6 @@ def insert_meta_record(uri, sourceId, sourceIdType, projectId):
 
     errorOccurred = False;
     try:
-        # db = CitizenScienceBatches.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-        # db.expire_on_commit = False
-        # citizen_science_batch_record = CitizenScienceBatches(cit_sci_proj_id=project_id, vendor_batch_id=vendor_batch_id, batch_status='ACTIVE')    
-        # db.add(citizen_science_batch_record)
-        
-        # db.commit()
-        # db.expunge_all()
-        # db.close()
         db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
         db.expire_on_commit = False
         citizen_science_meta_record = CitizenScienceMeta(edc_ver_id=edcVerId, source_id=sourceId, source_id_type=sourceIdType, uri=uri, public=public)
@@ -965,7 +1031,6 @@ def insert_meta_record(uri, sourceId, sourceIdType, projectId):
         db.close()
         metaRecordId = citizen_science_meta_record.cit_sci_meta_id
         logger.log_text("About to call insert_lookup_record() the usual way in the try block")
-        # insert_lookup_success = insert_lookup_record(metaRecordId, validator.project_id, validator.batch_id)
         errorOccurred = insert_lookup_record(metaRecordId, validator.project_id, validator.batch_id)
         logger.log_text("errorOccurred:")
         logger.log_text(str(errorOccurred))
