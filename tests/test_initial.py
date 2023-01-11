@@ -37,4 +37,4 @@ def test_check_batch_status():
     _OWNER_ID = main.create_new_owner_record("fake@email.io")
     _PROJECT_ID = main.create_new_project_record(_OWNER_ID, 88888)
     main.create_new_batch(_PROJECT_ID, 88888)
-    assert main.check_batch_status(_PROJECT_ID, 88888)[0].batch_id == 2
+    assert main.check_batch_status(_PROJECT_ID, 88888)[0]["batch_id"] == 2
