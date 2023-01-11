@@ -15,6 +15,7 @@ class CitizenScienceBatches(Base):
     batch_status = Column(String(50))
     date_created = Column(DateTime, server_default=func.now())
     date_last_updated = Column(DateTime, onupdate=func.now())
+    manifest_url = Column(String(255))
 
     def get_db_connection(db_host, db_port, db_name, db_user, db_pass):
             engine = sqlalchemy.create_engine("postgresql://{}:{}@{}:{}/{}".format(db_user, db_pass, db_host, db_port, db_name))
