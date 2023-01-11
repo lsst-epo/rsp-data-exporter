@@ -16,6 +16,7 @@ class CitizenScienceMeta(Base):
     uri = Column(String(255))
     public = Column(Boolean)
     date_created = Column(DateTime, server_default=func.now())
+    user_defined_values = Column(String(500))
 
     def get_db_connection(db_host, db_port, db_name, db_user, db_pass):
             engine = sqlalchemy.create_engine("postgresql://{}:{}@{}:{}/{}".format(db_user, db_pass, db_host, db_port, db_name))

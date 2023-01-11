@@ -7,6 +7,7 @@ class CitizenScienceValidator():
     active_batch = False
     project_id = None # EDC project ID
     batch_id = None # EDC batch ID
+    mapped_manifest = None
     log_to_edc = False
     edc_logger_notes = ""
     edc_logger_category = ""

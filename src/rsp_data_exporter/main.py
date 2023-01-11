@@ -87,18 +87,18 @@ def get_batch_metadata():
     batch_id = get_current_active_batch_id(project_id)
     logger.log_text("get_batch_metadata:: batche_id = " + str(batch_id))
 
-    lookup_records = query_lookup_records(project_id, batch_id)
-    logger.log_text("get_batch_metadata:: lookup_records length = " + str(len(lookup_records)))
-    logger.log_text(str(lookup_records))
+    manifest_url = lookup_manifest_url(batch_id)
 
-    batch_metadata = []
-    for meta_id in lookup_records:
-        metadata = lookup_meta_record(None, None, meta_id)
-        # logger.log_text("get_batch_metadata:: metadata=" + str(metadata))
-        if len(metadata) > 0:
-            batch_metadata.append(metadata[0])
-    logger.log_text("get_batch_metadata:: lookup_records length=" + str(len(lookup_records)))
-    return json.dumps(batch_metadata)
+    return json.dumps({
+        "metadata_url": manifest_url
+    })
+
+def lookup_manifest_url(batch_id):
+    db = CitizenScienceBatches.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+    stmt = select(CitizenScienceBatches).where(CitizenScienceBatches.cit_sci_batch_id == batch_id)
+    results = db.execute(stmt)
+    record = results.scalars().first()
+    return record.manifest_url
 
 def get_current_active_batch_id(project_id):
     db = CitizenScienceBatches.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
@@ -112,8 +112,6 @@ def get_current_active_batch_id(project_id):
     
     batch_id = record.cit_sci_batch_id
     logger.log_text(str(batch_id))
-    #         for row in results.scalars():
-    # logger.log_text(str(results.first().cit_sci_batch_id))
     return batch_id
 
 def query_lookup_records(project_id, batch_id):
@@ -240,11 +238,12 @@ def download_bucket_data_and_process():
     
             if validator.error is False:
                 urls = upload_cutouts(cutouts, vendor_project_id)
+                # manifest_url = upload_cutouts(cutouts, vendor_project_id)
 
                 if validator.error is False:
                 
-                    manifest_url = build_and_upload_manifest(urls, email, "556677", CLOUD_STORAGE_CIT_SCI_PUBLIC, guid + "/")
-                
+                    manifest_url = build_and_upload_manifest(urls, email, "556677", CLOUD_STORAGE_CIT_SCI_PUBLIC, guid)
+                    update_meta_record_with_user_values()
                     response.status = "success"
                     response.manifest_url = manifest_url
     else:
@@ -257,6 +256,69 @@ def download_bucket_data_and_process():
     time_mark(debug, "Done processing, return response to notebook aspect")
     return res
 
+def update_batch_record_with_manifest_url(manifest_url_p):
+    global validator
+    try:
+        logger.log_text("about to update the manifest URL of the new batch")
+        logger.log_text("updating batch ID #" + str(validator.batch_id) + " with manifest URL: " + manifest_url_p)
+        db = CitizenScienceBatches.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        db.expire_on_commit = False
+        db.execute(update(CitizenScienceBatches).where(CitizenScienceBatches.cit_sci_batch_id == validator.batch_id).values(manifest_url=manifest_url_p))
+        
+        db.commit()
+        # db.expunge_all()
+        db.close()
+        logger.log_text("done updating the batch record with the manifest URL")
+        # batchId = citizen_science_batch_record.cit_sci_batch_id
+        # logger.log_text("new batch id: " + str(batchId))
+    except Exception as e:
+        logger.log_text("An exception occurred while attempting to update the batch record with the manifest URL!")
+        logger.log_text(e.__str__())
+    return
+
+def update_meta_record_with_user_values():
+    global validator
+
+    logger.log_text("validator.mapped_manifest: ")
+    logger.log_text(str(validator.mapped_manifest))
+
+    for filename in validator.mapped_manifest:
+        logger.log_text("looping over validator.mapped_manifest values!!!")
+        logger.log_text("validator.mapped_manifest.value: " + str(validator.mapped_manifest[filename]))
+        edc_ver_id = validator.mapped_manifest[filename]["external_id"]
+        object_id = validator.mapped_manifest[filename]["objectId"]
+        user_defined_data = validator.mapped_manifest[filename]
+
+        # Remove fields that are already added to bespoke fields in the table
+        del user_defined_data["filename"]
+        del user_defined_data["external_id"]
+        del user_defined_data["objectId"]
+        logger.log_text("row after scrubbing fields: " + str(user_defined_data))
+
+        try:
+            logger.log_text("about to attempt to update meta record with user defined values!!!")
+            db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+            db.expire_on_commit = False
+            db.synchronize_session = False
+            stmt = select(CitizenScienceMeta).where(CitizenScienceMeta.uri.like("%" + filename + "%"))
+            results = db.execute(stmt)
+            for row in results.scalars():                
+                row.edc_ver_id = edc_ver_id
+                row.source_id = object_id
+                row.source_id_type = "object_id"
+                row.user_defined_values = str(user_defined_data)
+                db.commit()
+            
+            db.close()
+            logger.log_text("done updating meta record with user defined values")
+        except Exception as e:
+            logger.log_text("An exception occurred while attempting to update the meta record with the user defined values!")
+            logger.log_text("logging exception")
+            logger.log_text(e.__str__())
+            logger.log_text("done logging exception")
+            
+    return
+
 def upload_csv(csv_path):
     logger.log_text("inside of upload_csv")
     gcs = storage.Client()
@@ -268,16 +330,6 @@ def upload_csv(csv_path):
     logger.log_text("logging blob.public_url:")
     logger.log_text(blob.public_url)
     return blob.public_url
-
-# erosas: I don't think this is needed
-# def create_csv_records(csv_path, csv_url, data_type):
-#     csv_file = open(csv_path, "rU")
-#     reader = csv.reader(csv_file, delimiter=',')
-#     logger.log_text("about to loop CSV file contents in upload_csv")
-#     line_count = 0 # relevant to data rights approval limits, and zooniverse business rules for transfer thresholds
-#     for row in reader:
-#         logger.log_text(str(row))
-#     return
 
 def create_dr_forcedsource_records(csv_path, csv_url):
     csv_file = open(csv_path, "rU")
@@ -492,9 +544,6 @@ def upload_cutout_arr(cutouts, i):
         
 def insert_meta_records(urls, vendor_project_id):
     time_mark(debug, "Start of metadata record insertion")
-    logger.log_text("logging urls")
-    logger.log_text(str(urls))
-    logger.log_text("len(urls): " + str(len(urls)))
     for url in urls:
         insert_meta_record(url, str(round(time.time() * 1000)) , 'sourceId', vendor_project_id)
     time_mark(debug, "End of metadata record insertion")
@@ -557,7 +606,7 @@ def download_zip(bucket_name, filename, file = None, data_type = None):
     else:
         logger.log_text("Data is NOT in tabular format")
         if len(files) > max_objects_count:
-            response.messages.append("Currently, a maximum of " + str(max_objects_count) + " objects is allowed per batch for your project - your batch has been has been truncated and anything in excess of " + str(max_objects_count) + " objects has been removed.")
+            response.messages.append("Currently, a maximum of " + str(max_objects_count) + " objects is allowed per batch for your project - your batch of size " + str(len(files)) + " has been has been truncated and anything in excess of " + str(max_objects_count) + " objects has been removed.")
             time_mark(debug, "Start of truncating excess files")
             for f_file in files[(max_objects_count + 1):]:
                 # response.messages.append("Removing file : " + unzipped_cutouts_dir + "/" + f_file)
@@ -573,8 +622,8 @@ def download_zip(bucket_name, filename, file = None, data_type = None):
         time_mark(debug, "Grabbing cutouts finished...")
         return cutouts
 
-def build_and_upload_manifest(urls, email, sourceId, bucket, destination_root = ""):
-    global debug
+def build_and_upload_manifest(urls, email, sourceId, bucket, guid = ""):
+    global debug, validator
     time_mark(debug, "In build and upload manifest")
     # Create a Cloud Storage client.
     gcs = storage.Client()
@@ -582,20 +631,67 @@ def build_and_upload_manifest(urls, email, sourceId, bucket, destination_root = 
     # Get the bucket that the file will be uploaded to.
     bucket = gcs.bucket(bucket)
 
+    # list to store the names of columns
+    column_names = None
+    cutout_metadata = {}
+    filename_idx = None
+
+    # Read the manifest that came from the RSP and store it in a dict with 
+    # the filename as the key
+    logger.log_text("about to read the RSP manifest")
+    with open('/tmp/' + guid + '/metadata.csv', 'r') as csv_file:
+        csv_reader = csv.reader(csv_file, delimiter = ',')
+    
+        first = True
+        # loop to iterate through the rows of csv
+        for row in csv_reader:
+            
+            # adding the first row
+            if first == True:
+                logger.log_text("about to log headers")
+                logger.log_text(str(row))
+                column_names = row
+                filename_idx = column_names.index("filename")
+                column_names[column_names.index("edc_ver_id")] = "external_id"
+                first = False
+            else:
+                # Set new key for row
+                filename = row[filename_idx]
+
+                metadata = {}
+                c_idx = 0
+                for col in row:
+                    metadata[column_names[c_idx]] = col
+                    c_idx = c_idx + 1
+                
+                cutout_metadata[filename] = metadata
+    validator.mapped_manifest = cutout_metadata
+
     # loop over urls
-    with open('/tmp/manifest.csv', 'w', newline='') as csvfile:
-        fieldnames = ['email', 'location:1', 'external_id']
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+    logger.log_text("about to write new manifest file")
+    with open('/tmp/' + guid + '/manifest.csv', 'w', newline='') as csvfile:
+        column_names.append("location:1")
+        writer = csv.DictWriter(csvfile, fieldnames=column_names)
 
         writer.writeheader()
-        offset = 1
-        for url in urls:
-            writer.writerow({'email': email, 'location:1': url, 'external_id': str(round(time.time() * 1000) + offset) })
-            offset += 1
-    
-    manifestBlob = bucket.blob(destination_root + "manifest.csv")
 
-    manifestBlob.upload_from_filename("/tmp/manifest.csv")
+        for url in urls:
+            url_list = url.split("/")
+            filename = url_list[len(url_list)-1]
+
+            if filename in cutout_metadata:
+                csv_row = cutout_metadata[filename]
+                csv_row["location:1"] = url
+                writer.writerow(csv_row)
+
+    logger.log_text("done writing new manifest")
+    
+    manifestBlob = bucket.blob(guid + "/manifest.csv")
+    
+
+    logger.log_text("about to upload the new manifest to GCS")
+    manifestBlob.upload_from_filename("/tmp/" + guid + "/manifest.csv")
+    update_batch_record_with_manifest_url(manifestBlob.public_url)
     return manifestBlob.public_url
 
 def validate_project_metadata(email, vendor_project_id, vendor_batch_id = None):
@@ -724,8 +820,6 @@ def check_batch_status(project_id, vendor_project_id):
     global validator, debug
     time_mark(debug, "Start of check batch status!!!")
     logger.log_text("inside of check_batch_status, logging project_id : " + str(project_id))
-    batch_id = -1
-    vendor_batch_id_db = 0
     batches_still_active = []
     batches_not_found_in_zooniverse = []
 
@@ -803,11 +897,9 @@ def check_batch_status(project_id, vendor_project_id):
                                                 else:
                                                     logger.log_text("Erroneous caching of Zooniverse client, updating EDC database");
                                                     update_batch_record = True
-                                                    # batch_id = -1
                                                     break
                                             except StopIteration:
                                                 logger.log_text("setting validator.error to True!")
-                                                # validator.error = True
                                                 validator.log_to_edc = True
                                                 validator.edc_logger_category = "BATCH_LOOKUP"
                                                 logger_notes = {
@@ -820,10 +912,8 @@ def check_batch_status(project_id, vendor_project_id):
                                                 response.status = "error"
                                                 response.messages.append("You have an active, but empty subject set on the zooniverse platform with an ID of " + str(batch_in_db["vendor_batch_id_db"]) + ". Please delete this subject set on the Zoonivese platform and try again.")
                                                 continue
-                                    # break
                         except Exception as e:
                             logger.log_text("An error occurred while looping through the subject sets, this usually occurs because of stale data that has been cached by Zooniverse. ")
-                            # validator.error = True
                             validator.log_to_edc = True
                             validator.edc_logger_category = "BATCH_LOOKUP"
                             validator.edc_logger_notes = str(e)
@@ -834,13 +924,11 @@ def check_batch_status(project_id, vendor_project_id):
                         logger.log_text("The subject set in question was NEVER found!")
                         batches_not_found_in_zooniverse.append(str(batch_in_db["vendor_batch_id_db"]))
                         update_batch_record = True
-                        # batch_id = -1
 
                 if update_batch_record == True:
                     logger.log_text("about to update EDC batch ID " + str(batch_in_db["batch_id"]) + ", vendor batch ID: " + str(batch_in_db["vendor_batch_id_db"]) + " in the DB!")
                     batch_in_db["batch_record"].batch_status = "COMPLETE"
                     db.commit()
-                    # batch_id = -1
         elif TEST_ONLY == True:
             for batch in batches_in_db:
                 batches_still_active.append({
@@ -1035,7 +1123,7 @@ def insert_meta_record(uri, sourceId, sourceIdType, projectId):
         logger.log_text("errorOccurred:")
         logger.log_text(str(errorOccurred))
         logger.log_text("about to log metaRecordId")
-        logger.log_text(metaRecordId)
+        logger.log_text(str(metaRecordId))
 
     except Exception as e:
         logger.log_text("An exception occurred in insert_meta_record()")
