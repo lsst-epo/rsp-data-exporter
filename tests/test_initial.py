@@ -25,10 +25,12 @@ def test_lookup_owner_record():
 
 # Project record tests
 def test_create_new_project():
+    global _OWNER_ID, _VENDOR_PROJECT_ID
     _PROJECT_ID = main.create_new_project_record(_OWNER_ID, _VENDOR_PROJECT_ID)
     assert _PROJECT_ID == 1
 
 def test_lookup_project_record():
+    global _VENDOR_PROJECT_ID
     assert main.lookup_project_record(_VENDOR_PROJECT_ID) == 1
 
 # Batch record tests
