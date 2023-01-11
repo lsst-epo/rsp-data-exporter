@@ -962,6 +962,8 @@ def create_new_project_record(ownerId, vendorProjectId):
 
 
     except Exception as e:
+        print("something bad happened!!! rosas")
+        print(e.__str__())
         validator.error = True
         response.status = "error"
         response.messages.append("An error occurred while attempting to create a new project owner record for you - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
