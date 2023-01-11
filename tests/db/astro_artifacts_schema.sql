@@ -5,7 +5,7 @@
 -- Dumped from database version 13.7
 -- Dumped by pg_dump version 14.4
 
--- Started on 2022-12-21 12:03:25 MST
+-- Started on 2023-01-11 10:31:38 MST
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -19,8 +19,8 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
--- TOC entry 3705 (class 1262 OID 20740)
--- Name: astro_artifacts; Type: DATABASE; Schema: -; Owner: -
+-- TOC entry 698 (class 1247 OID 54246)
+-- Name: emaildeliverytype; Type: TYPE; Schema: public; Owner: -
 --
 
 CREATE DATABASE astro_artifacts WITH TEMPLATE = template0 ENCODING = 'UTF8' LOCALE = 'en_US.UTF8';
@@ -39,10 +39,6 @@ SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
 
--- --
--- -- TOC entry 697 (class 1247 OID 54246)
--- -- Name: emaildeliverytype; Type: TYPE; Schema: public; Owner: -
--- --
 
 -- CREATE TYPE public.emaildeliverytype AS ENUM (
 --     'attachment',
@@ -51,7 +47,7 @@ SET row_security = off;
 
 
 -- --
--- -- TOC entry 706 (class 1247 OID 54390)
+-- -- TOC entry 707 (class 1247 OID 54390)
 -- -- Name: objecttypes; Type: TYPE; Schema: public; Owner: -
 -- --
 
@@ -64,7 +60,7 @@ SET row_security = off;
 
 
 -- --
--- -- TOC entry 700 (class 1247 OID 54284)
+-- -- TOC entry 701 (class 1247 OID 54284)
 -- -- Name: sliceemailreportformat; Type: TYPE; Schema: public; Owner: -
 -- --
 
@@ -75,7 +71,7 @@ SET row_security = off;
 
 
 -- --
--- -- TOC entry 703 (class 1247 OID 54360)
+-- -- TOC entry 704 (class 1247 OID 54360)
 -- -- Name: tagtypes; Type: TYPE; Schema: public; Owner: -
 -- --
 
@@ -117,7 +113,7 @@ CREATE SEQUENCE public.alert_query_store_edc_alert_query_id_seq
 
 
 --
--- TOC entry 3706 (class 0 OID 0)
+-- TOC entry 3704 (class 0 OID 0)
 -- Dependencies: 212
 -- Name: alert_query_store_edc_alert_query_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
@@ -156,7 +152,7 @@ CREATE SEQUENCE public.alert_stream_payloads_edc_alert_stream_id_seq
 
 
 --
--- TOC entry 3707 (class 0 OID 0)
+-- TOC entry 3705 (class 0 OID 0)
 -- Dependencies: 210
 -- Name: alert_stream_payloads_edc_alert_stream_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
@@ -192,7 +188,8 @@ CREATE TABLE public.citizen_science_batches (
     vendor_batch_id bigint NOT NULL,
     batch_status character varying(30) NOT NULL,
     date_created timestamp with time zone DEFAULT now() NOT NULL,
-    date_last_updated timestamp with time zone
+    date_last_updated timestamp with time zone,
+    manifest_url character varying(255)
 );
 
 
@@ -223,7 +220,8 @@ CREATE TABLE public.citizen_science_meta (
     source_id_type character varying(30),
     uri character varying(255),
     date_created timestamp with time zone DEFAULT now(),
-    public boolean NOT NULL
+    public boolean NOT NULL,
+    user_defined_values character varying(500)
 );
 
 
@@ -545,7 +543,7 @@ CREATE TABLE public.edc_logger (
 
 
 --
--- TOC entry 3538 (class 2604 OID 52748)
+-- TOC entry 3539 (class 2604 OID 52748)
 -- Name: alert_query_store edc_alert_query_id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -553,7 +551,7 @@ ALTER TABLE ONLY public.alert_query_store ALTER COLUMN edc_alert_query_id SET DE
 
 
 --
--- TOC entry 3536 (class 2604 OID 52600)
+-- TOC entry 3537 (class 2604 OID 52600)
 -- Name: alert_stream_payloads edc_alert_stream_id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -561,7 +559,7 @@ ALTER TABLE ONLY public.alert_stream_payloads ALTER COLUMN edc_alert_stream_id S
 
 
 --
--- TOC entry 3563 (class 2606 OID 52753)
+-- TOC entry 3562 (class 2606 OID 52753)
 -- Name: alert_query_store alert_query_store_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -570,7 +568,7 @@ ALTER TABLE ONLY public.alert_query_store
 
 
 --
--- TOC entry 3561 (class 2606 OID 52605)
+-- TOC entry 3560 (class 2606 OID 52605)
 -- Name: alert_stream_payloads alert_stream_payloads_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -579,7 +577,7 @@ ALTER TABLE ONLY public.alert_stream_payloads
 
 
 --
--- TOC entry 3543 (class 2606 OID 20748)
+-- TOC entry 3544 (class 2606 OID 20748)
 -- Name: astro_objects astro_objects_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -588,7 +586,7 @@ ALTER TABLE ONLY public.astro_objects
 
 
 --
--- TOC entry 3545 (class 2606 OID 20803)
+-- TOC entry 3546 (class 2606 OID 20803)
 -- Name: citizen_science_meta citizen_science_meta_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -597,7 +595,7 @@ ALTER TABLE ONLY public.citizen_science_meta
 
 
 --
--- TOC entry 3547 (class 2606 OID 27856)
+-- TOC entry 3548 (class 2606 OID 27856)
 -- Name: citizen_science_owners citizen_science_owners_email_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -606,7 +604,7 @@ ALTER TABLE ONLY public.citizen_science_owners
 
 
 --
--- TOC entry 3549 (class 2606 OID 27786)
+-- TOC entry 3550 (class 2606 OID 27786)
 -- Name: citizen_science_owners citizen_science_owners_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -615,7 +613,7 @@ ALTER TABLE ONLY public.citizen_science_owners
 
 
 --
--- TOC entry 3554 (class 2606 OID 53144)
+-- TOC entry 3555 (class 2606 OID 53144)
 -- Name: citizen_science_proj_meta_lookup citizen_science_proj_meta_lookup_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -624,7 +622,7 @@ ALTER TABLE ONLY public.citizen_science_proj_meta_lookup
 
 
 --
--- TOC entry 3551 (class 2606 OID 27795)
+-- TOC entry 3552 (class 2606 OID 27795)
 -- Name: citizen_science_projects citizen_science_projects_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -633,7 +631,7 @@ ALTER TABLE ONLY public.citizen_science_projects
 
 
 --
--- TOC entry 3565 (class 2606 OID 55175)
+-- TOC entry 3564 (class 2606 OID 55175)
 -- Name: edc_logger edc_logger_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -642,16 +640,7 @@ ALTER TABLE ONLY public.edc_logger
 
 
 --
--- TOC entry 3557 (class 2606 OID 36373)
--- Name: citizen_science_proj_meta_lookup uniqueness; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.citizen_science_proj_meta_lookup
-    ADD CONSTRAINT uniqueness UNIQUE (cit_sci_batch_id);
-
-
---
--- TOC entry 3559 (class 2606 OID 36375)
+-- TOC entry 3558 (class 2606 OID 36375)
 -- Name: citizen_science_batches uniqueness2; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -660,7 +649,7 @@ ALTER TABLE ONLY public.citizen_science_batches
 
 
 --
--- TOC entry 3552 (class 1259 OID 27820)
+-- TOC entry 3553 (class 1259 OID 27820)
 -- Name: citizen_science_proj_meta_lookup_meta_id_fk; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -668,7 +657,7 @@ CREATE INDEX citizen_science_proj_meta_lookup_meta_id_fk ON public.citizen_scien
 
 
 --
--- TOC entry 3555 (class 1259 OID 27814)
+-- TOC entry 3556 (class 1259 OID 27814)
 -- Name: citizen_science_proj_meta_project_id_fk; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -676,7 +665,7 @@ CREATE INDEX citizen_science_proj_meta_project_id_fk ON public.citizen_science_p
 
 
 --
--- TOC entry 3569 (class 2606 OID 36381)
+-- TOC entry 3568 (class 2606 OID 36381)
 -- Name: citizen_science_proj_meta_lookup citizen_science_proj_meta_lookup_cit_sci_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -685,7 +674,7 @@ ALTER TABLE ONLY public.citizen_science_proj_meta_lookup
 
 
 --
--- TOC entry 3568 (class 2606 OID 27815)
+-- TOC entry 3567 (class 2606 OID 27815)
 -- Name: citizen_science_proj_meta_lookup citizen_science_proj_meta_lookup_cit_sci_meta_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -694,7 +683,7 @@ ALTER TABLE ONLY public.citizen_science_proj_meta_lookup
 
 
 --
--- TOC entry 3567 (class 2606 OID 27809)
+-- TOC entry 3566 (class 2606 OID 27809)
 -- Name: citizen_science_proj_meta_lookup citizen_science_proj_meta_lookup_cit_sci_proj_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -703,7 +692,7 @@ ALTER TABLE ONLY public.citizen_science_proj_meta_lookup
 
 
 --
--- TOC entry 3566 (class 2606 OID 27799)
+-- TOC entry 3565 (class 2606 OID 27799)
 -- Name: citizen_science_projects citizen_science_projects_owner_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -711,7 +700,7 @@ ALTER TABLE ONLY public.citizen_science_projects
     ADD CONSTRAINT citizen_science_projects_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES public.citizen_science_owners(cit_sci_owner_id) NOT VALID;
 
 
--- Completed on 2022-12-21 12:03:51 MST
+-- Completed on 2023-01-11 10:32:02 MST
 
 --
 -- PostgreSQL database dump complete
