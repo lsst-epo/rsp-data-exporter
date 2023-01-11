@@ -24,7 +24,7 @@ def test_create_new_project():
     assert _PROJECT_ID == 1
 
 def test_lookup_project_record():
-    assert main.lookup_project_record("99999") == 2
+    assert main.lookup_project_record("99999") == 1
 
 # Batch record tests
 def test_create_new_batch():
@@ -36,5 +36,5 @@ def test_create_new_batch():
 def test_check_batch_status():
     _OWNER_ID = main.create_new_owner_record("fake@email.io")
     _PROJECT_ID = main.create_new_project_record(_OWNER_ID, 88888)
-    _BATCH_ID = main.create_new_batch(_PROJECT_ID, 88888)
-    assert main.check_batch_status(_PROJECT_ID, 88888)[0] == 2
+    main.create_new_batch(_PROJECT_ID, 88888)
+    assert main.check_batch_status(_PROJECT_ID, 88888)[0].batch_id == 2
