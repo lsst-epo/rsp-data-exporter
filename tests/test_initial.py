@@ -17,13 +17,13 @@ def test_create_owner_record():
     assert _OWNER_ID == 1
 
 def test_lookup_owner_record():
-    _EMAIL = "fake@email.org"
+    _EMAIL = "fake@email.com"
 
     assert main.lookup_owner_record(_EMAIL) == 1
 
 # Project record tests
 def test_create_new_project():
-    _EMAIL = "fake@email.net"
+    _EMAIL = "fake@email.org"
     _VENDOR_BATCH_ID = 99999
 
     _OWNER_ID = main.create_new_owner_record(_EMAIL)
@@ -37,7 +37,7 @@ def test_lookup_project_record():
 
 # Batch record tests
 def test_create_new_batch():
-    _EMAIL = "fake@email.biz"
+    _EMAIL = "fake@email.net"
     _VENDOR_BATCH_ID = 77777
 
     _OWNER_ID = main.create_new_owner_record(_EMAIL)
