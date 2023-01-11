@@ -1006,6 +1006,8 @@ def lookup_project_record(vendorProjectId):
                 project_id = row.cit_sci_proj_id
         db.close()
     except Exception as e:
+        print("error in project lookup! rosas2")
+        print(e.__str__())
         validator.error = True
         response.status = "error"
         logger.log_text("an exception occurred in lookup_project_record")
