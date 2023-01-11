@@ -11,30 +11,45 @@ def test_sanity_check():
 
 # Owner record tests
 def test_create_owner_record():
-    _OWNER_ID = main.create_new_owner_record("fake@email.com")
+    _EMAIL = "fake@email.com"
+
+    _OWNER_ID = main.create_new_owner_record(_EMAIL)
     assert _OWNER_ID == 1
 
 def test_lookup_owner_record():
-    assert main.lookup_owner_record("fake@email.com") == 1
+    _EMAIL = "fake@email.com"
+
+    assert main.lookup_owner_record(_EMAIL) == 1
 
 # Project record tests
 def test_create_new_project():
-    _OWNER_ID = main.create_new_owner_record("fake@email.org")
-    _PROJECT_ID = main.create_new_project_record(_OWNER_ID, 99999)
+    _EMAIL = "fake@email.com"
+    _VENDOR_BATCH_ID = 99999
+
+    _OWNER_ID = main.create_new_owner_record(_EMAIL)
+    _PROJECT_ID = main.create_new_project_record(_OWNER_ID, _VENDOR_BATCH_ID)
     assert _PROJECT_ID == 1
 
 def test_lookup_project_record():
-    assert main.lookup_project_record("99999") == 1
+    _VENDOR_BATCH_ID = "99999"
+
+    assert main.lookup_project_record(_VENDOR_BATCH_ID) == 1
 
 # Batch record tests
 def test_create_new_batch():
-    _OWNER_ID = main.create_new_owner_record("fake@email.net")
-    _PROJECT_ID = main.create_new_project_record(_OWNER_ID, 77777)
-    _BATCH_ID = main.create_new_batch(_PROJECT_ID, 77777)
+    _EMAIL = "fake@email.net"
+    _VENDOR_BATCH_ID = 77777
+
+    _OWNER_ID = main.create_new_owner_record(_EMAIL)
+    _PROJECT_ID = main.create_new_project_record(_OWNER_ID, _VENDOR_BATCH_ID)
+    _BATCH_ID = main.create_new_batch(_PROJECT_ID, _VENDOR_BATCH_ID)
     assert _BATCH_ID == 1
 
 def test_check_batch_status():
-    _OWNER_ID = main.create_new_owner_record("fake@email.io")
-    _PROJECT_ID = main.create_new_project_record(_OWNER_ID, 88888)
-    main.create_new_batch(_PROJECT_ID, 88888)
-    assert main.check_batch_status(_PROJECT_ID, 88888)[0]["batch_record"]["batch_id"] == 2
+    _EMAIL = "fake@email.io"
+    _VENDOR_BATCH_ID = 88888
+    
+    _OWNER_ID = main.create_new_owner_record(_EMAIL)
+    _PROJECT_ID = main.create_new_project_record(_OWNER_ID, _VENDOR_BATCH_ID)
+    main.create_new_batch(_PROJECT_ID, _VENDOR_BATCH_ID)
+    assert main.check_batch_status(_PROJECT_ID, _VENDOR_BATCH_ID)[0]["batch_record"]["batch_id"] == 2
