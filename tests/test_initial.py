@@ -68,4 +68,4 @@ def test_check_meta_record():
 
     meta_ids = main.insert_meta_records(_URLS, _VENDOR_BATCH_ID)
     meta_records = main.lookup_meta_record(None, None, meta_ids[0])
-    assert meta_records[0].cit_sci_meta_id == 2
+    assert meta_records[0]["cit_sci_meta_id"] == 2
