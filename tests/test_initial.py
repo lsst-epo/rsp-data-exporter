@@ -77,7 +77,9 @@ def test_check_meta_record_by_source_id():
     _OWNER_ID = main.create_new_owner_record(_EMAIL)
     print("within test, _OWNER_ID: " + str(_OWNER_ID))
     _PROJECT_ID = main.create_new_project_record(_OWNER_ID, _VENDOR_BATCH_ID)
+    print("within test, _PROJECT_ID: " + str(_PROJECT_ID))
     _BATCH_ID = main.create_new_batch(_PROJECT_ID, _VENDOR_BATCH_ID)
+    print("within test, _BATCH_ID: " + str(_BATCH_ID))
 
 
     _URLS = ["http://some.fake.url/only/for/testing"]
