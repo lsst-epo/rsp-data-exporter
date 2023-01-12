@@ -1121,7 +1121,7 @@ def insert_meta_record(uri, sourceId, sourceIdType, projectId):
         db.add(citizen_science_meta_record)
         db.commit()
         
-        metaRecordId = citizen_science_meta_record.cit_sci_meta_id
+        metaRecordId = citizen_science_meta_record.cit_sci_meta_id 
         logger.log_text("About to call insert_lookup_record() the usual way in the try block")
         errorOccurred = insert_lookup_record(metaRecordId, validator.project_id, validator.batch_id)
         logger.log_text("errorOccurred:")
@@ -1132,6 +1132,8 @@ def insert_meta_record(uri, sourceId, sourceIdType, projectId):
         db.close()
         print("about to print citizen_science_meta_record:")
         print(str(citizen_science_meta_record.__dict__))
+        print("1. metaRecordId: " + str(metaRecordId))
+        print(type(metaRecordId))
 
     except Exception as e:
         logger.log_text("An exception occurred in insert_meta_record()")
@@ -1147,6 +1149,7 @@ def insert_meta_record(uri, sourceId, sourceIdType, projectId):
         #     logger.log_text("NOT! non_dup_record!")
         metaRecordId = -1
     
+    print("2. metaRecordId: " + str(metaRecordId))
     return metaRecordId
 
 def insert_lookup_record(metaRecordId, projectId, batchId):
