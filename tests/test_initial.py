@@ -53,3 +53,19 @@ def test_check_batch_status():
     _PROJECT_ID = main.create_new_project_record(_OWNER_ID, _VENDOR_BATCH_ID)
     main.create_new_batch(_PROJECT_ID, _VENDOR_BATCH_ID)
     assert main.check_batch_status(_PROJECT_ID, _VENDOR_BATCH_ID)[0]["batch_record"]["batch_id"] == 2
+
+# Meta record tests
+def test_create_meta_record():
+    _URLS = ["http://some.fake.url/only/for/testing"]
+    _VENDOR_BATCH_ID = 66666
+
+    meta_ids = main.insert_meta_records(_URLS, _VENDOR_BATCH_ID)
+    assert len(meta_ids) == 1
+
+def test_check_meta_record():
+    _URLS = ["http://some.fake.url/only/for/testing"]
+    _VENDOR_BATCH_ID = 55555
+
+    meta_ids = main.insert_meta_records(_URLS, _VENDOR_BATCH_ID)
+    meta_id = main.lookup_meta_record(None, None, meta_ids[0])
+    assert meta_id == 2

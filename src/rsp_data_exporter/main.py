@@ -544,10 +544,13 @@ def upload_cutout_arr(cutouts, i):
         
 def insert_meta_records(urls, vendor_project_id):
     time_mark(debug, "Start of metadata record insertion")
+    meta_ids = []
     for url in urls:
-        insert_meta_record(url, str(round(time.time() * 1000)) , 'sourceId', vendor_project_id)
+        meta_id = insert_meta_record(url, str(round(time.time() * 1000)) , 'sourceId', vendor_project_id)
+        if meta_id > 0:
+            meta_ids.append(meta_id)
     time_mark(debug, "End of metadata record insertion")
-    return
+    return meta_ids
 
 # Accepts the bucket name and filename to download and returns the path of the downloaded file
 def download_zip(bucket_name, filename, file = None, data_type = None):
@@ -1108,7 +1111,7 @@ def insert_meta_record(uri, sourceId, sourceIdType, projectId):
     edcVerId = round(time.time() * 1000)
     public = True
 
-    errorOccurred = False;
+    metaRecordId = None;
     try:
         db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
         db.expire_on_commit = False
@@ -1135,9 +1138,9 @@ def insert_meta_record(uri, sourceId, sourceIdType, projectId):
         else:
             logger.log_text(e.__str__())
             logger.log_text("NOT! non_dup_record!")
-        return False
+        metaRecordId = -1
     
-    return errorOccurred
+    return metaRecordId
 
 def insert_lookup_record(metaRecordId, projectId, batchId):
     logger.log_text("About to insert lookup record")
