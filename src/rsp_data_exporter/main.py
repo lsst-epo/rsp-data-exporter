@@ -1120,8 +1120,7 @@ def insert_meta_record(uri, sourceId, sourceIdType, projectId):
         citizen_science_meta_record = CitizenScienceMeta(edc_ver_id=edcVerId, source_id=sourceId, source_id_type=sourceIdType, uri=uri, public=public)
         db.add(citizen_science_meta_record)
         db.commit()
-        db.expunge_all()
-        db.close()
+        
         metaRecordId = citizen_science_meta_record.cit_sci_meta_id
         logger.log_text("About to call insert_lookup_record() the usual way in the try block")
         errorOccurred = insert_lookup_record(metaRecordId, validator.project_id, validator.batch_id)
@@ -1129,6 +1128,10 @@ def insert_meta_record(uri, sourceId, sourceIdType, projectId):
         logger.log_text(str(errorOccurred))
         logger.log_text("about to log metaRecordId")
         logger.log_text(str(metaRecordId))
+        db.expunge_all()
+        db.close()
+        print("about to print citizen_science_meta_record:")
+        print(str(citizen_science_meta_record))
 
     except Exception as e:
         logger.log_text("An exception occurred in insert_meta_record()")
