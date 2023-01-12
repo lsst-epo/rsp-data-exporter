@@ -71,9 +71,18 @@ def test_check_meta_record_by_meta_id():
     assert len(meta_records) == 1
 
 def test_check_meta_record_by_source_id():
+    _EMAIL = "fake@email.net"
+    _VENDOR_BATCH_ID = 77777
+
+    _OWNER_ID = main.create_new_owner_record(_EMAIL)
+    _PROJECT_ID = main.create_new_project_record(_OWNER_ID, _VENDOR_BATCH_ID)
+    _BATCH_ID = main.create_new_batch(_PROJECT_ID, _VENDOR_BATCH_ID)
+
+
     _URLS = ["http://some.fake.url/only/for/testing"]
     _SOURCE_ID = 44444
     _SOURCE_ID_TYPE = "sourceId"
+    
 
     main.insert_meta_records(_URLS, _SOURCE_ID)
     meta_record = main.lookup_meta_record(_SOURCE_ID, _SOURCE_ID_TYPE)
@@ -81,17 +90,31 @@ def test_check_meta_record_by_source_id():
 
 # Lookup record tests
 def test_create_lookup_record():
+    _EMAIL = "fake@email.tv"
+    _VENDOR_BATCH_ID = 77777
+
+    _OWNER_ID = main.create_new_owner_record(_EMAIL)
+    _PROJECT_ID = main.create_new_project_record(_OWNER_ID, _VENDOR_BATCH_ID)
+    _BATCH_ID = main.create_new_batch(_PROJECT_ID, _VENDOR_BATCH_ID)
+
     _META_RECORD_ID = 100
-    _PROJECT_ID = 1
-    _BATCH_ID = 1
+    # _PROJECT_ID = 1
+    # _BATCH_ID = 1
 
     successful = main.insert_lookup_record(_META_RECORD_ID, _PROJECT_ID, _BATCH_ID)
     assert successful == True
 
 def test_lookup_lookup_records():
-    _META_RECORD_ID = 100
-    _PROJECT_ID = 1
-    _BATCH_ID = 999
+    _EMAIL = "fake@email.ca"
+    _VENDOR_BATCH_ID = 77777
+
+    _OWNER_ID = main.create_new_owner_record(_EMAIL)
+    _PROJECT_ID = main.create_new_project_record(_OWNER_ID, _VENDOR_BATCH_ID)
+    _BATCH_ID = main.create_new_batch(_PROJECT_ID, _VENDOR_BATCH_ID)
+
+    _META_RECORD_ID = 200
+    # _PROJECT_ID = 1
+    # _BATCH_ID = 999
 
     main.insert_lookup_record(_META_RECORD_ID, _PROJECT_ID, _BATCH_ID)
     meta_ids = main.query_lookup_records(_PROJECT_ID, _BATCH_ID)
