@@ -87,7 +87,8 @@ def test_check_meta_record_by_source_id():
     _SOURCE_ID_TYPE = "sourceId"
     
 
-    main.insert_meta_records(_URLS, _SOURCE_ID)
+    meta_id = main.insert_meta_records(_URLS, _SOURCE_ID)
+    print("within test, meta_id: " + str(meta_id))
     meta_record = main.lookup_meta_record(_SOURCE_ID, _SOURCE_ID_TYPE)
     assert meta_record > 1
 
