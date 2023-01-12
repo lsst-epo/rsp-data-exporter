@@ -71,10 +71,11 @@ def test_check_meta_record_by_meta_id():
     assert len(meta_records) == 1
 
 def test_check_meta_record_by_source_id():
-    _EMAIL = "fake@email.net"
+    _EMAIL = "fake@email.az"
     _VENDOR_BATCH_ID = 33333
 
     _OWNER_ID = main.create_new_owner_record(_EMAIL)
+    print("within test, _OWNER_ID: " + str(_OWNER_ID))
     _PROJECT_ID = main.create_new_project_record(_OWNER_ID, _VENDOR_BATCH_ID)
     _BATCH_ID = main.create_new_batch(_PROJECT_ID, _VENDOR_BATCH_ID)
 
@@ -106,7 +107,7 @@ def test_lookup_lookup_records():
     _EMAIL = "fake@email.ca"
     _VENDOR_BATCH_ID = 11122
     _URLS = ["http://some.fake.url/only/for/testing"]
-    
+
     _OWNER_ID = main.create_new_owner_record(_EMAIL)
     _PROJECT_ID = main.create_new_project_record(_OWNER_ID, _VENDOR_BATCH_ID)
     _BATCH_ID = main.create_new_batch(_PROJECT_ID, _VENDOR_BATCH_ID)
