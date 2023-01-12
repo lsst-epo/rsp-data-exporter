@@ -1131,7 +1131,7 @@ def insert_meta_record(uri, sourceId, sourceIdType, projectId):
         db.expunge_all()
         db.close()
         print("about to print citizen_science_meta_record:")
-        print(str(citizen_science_meta_record))
+        print(str(citizen_science_meta_record.__dict__))
 
     except Exception as e:
         logger.log_text("An exception occurred in insert_meta_record()")
