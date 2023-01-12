@@ -99,10 +99,6 @@ def test_create_lookup_record():
     _BATCH_ID = main.create_new_batch(_PROJECT_ID, _VENDOR_BATCH_ID)
     _META_RECORD_ID = main.insert_meta_records(_URLS, _VENDOR_BATCH_ID)[0]
 
-    # _META_RECORD_ID = 100
-    # _PROJECT_ID = 1
-    # _BATCH_ID = 1
-
     successful = main.insert_lookup_record(_META_RECORD_ID, _PROJECT_ID, _BATCH_ID)
     assert successful == True
 
@@ -110,15 +106,11 @@ def test_lookup_lookup_records():
     _EMAIL = "fake@email.ca"
     _VENDOR_BATCH_ID = 11122
     _URLS = ["http://some.fake.url/only/for/testing"]
-
+    
     _OWNER_ID = main.create_new_owner_record(_EMAIL)
     _PROJECT_ID = main.create_new_project_record(_OWNER_ID, _VENDOR_BATCH_ID)
     _BATCH_ID = main.create_new_batch(_PROJECT_ID, _VENDOR_BATCH_ID)
     _META_RECORD_ID = main.insert_meta_records(_URLS, _VENDOR_BATCH_ID)[0]
-
-    # _META_RECORD_ID = 200
-    # _PROJECT_ID = 1
-    # _BATCH_ID = 999
 
     main.insert_lookup_record(_META_RECORD_ID, _PROJECT_ID, _BATCH_ID)
     meta_ids = main.query_lookup_records(_PROJECT_ID, _BATCH_ID)

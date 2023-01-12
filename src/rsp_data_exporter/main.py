@@ -1158,6 +1158,8 @@ def insert_lookup_record(metaRecordId, projectId, batchId):
     except Exception as e:
         print("exception in insert_lookup_record()!")
         print(e.__str__())
+        print("validator.batch_id: " + str(validator.batch_id))
+        print("validator.project_id: " + str(validator.project_id))
         logger.log_text("An exception occurred while trying to insert lookup record!!")
         logger.log_text(e.__str__())
         return False
