@@ -1079,7 +1079,7 @@ def lookup_meta_record(sourceId, sourceIdType, meta_id = None):
                 print("looping through results!")
                 metaId = row.cit_sci_meta_id
                 print("metaId: " + str(metaId))
-                print(str(row.__dict__)
+                print(str(row.__dict__))
 
             db.close()
 
