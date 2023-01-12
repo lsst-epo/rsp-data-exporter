@@ -92,12 +92,14 @@ def test_check_meta_record_by_source_id():
 def test_create_lookup_record():
     _EMAIL = "fake@email.tv"
     _VENDOR_BATCH_ID = 22333
+    _URLS = ["http://some.fake.url/only/for/testing"]
 
     _OWNER_ID = main.create_new_owner_record(_EMAIL)
     _PROJECT_ID = main.create_new_project_record(_OWNER_ID, _VENDOR_BATCH_ID)
     _BATCH_ID = main.create_new_batch(_PROJECT_ID, _VENDOR_BATCH_ID)
+    _META_RECORD_ID = main.insert_meta_records(_URLS, _VENDOR_BATCH_ID)
 
-    _META_RECORD_ID = 100
+    # _META_RECORD_ID = 100
     # _PROJECT_ID = 1
     # _BATCH_ID = 1
 
@@ -107,12 +109,14 @@ def test_create_lookup_record():
 def test_lookup_lookup_records():
     _EMAIL = "fake@email.ca"
     _VENDOR_BATCH_ID = 11122
+    _URLS = ["http://some.fake.url/only/for/testing"]
 
     _OWNER_ID = main.create_new_owner_record(_EMAIL)
     _PROJECT_ID = main.create_new_project_record(_OWNER_ID, _VENDOR_BATCH_ID)
     _BATCH_ID = main.create_new_batch(_PROJECT_ID, _VENDOR_BATCH_ID)
+    _META_RECORD_ID = main.insert_meta_records(_URLS, _VENDOR_BATCH_ID)
 
-    _META_RECORD_ID = 200
+    # _META_RECORD_ID = 200
     # _PROJECT_ID = 1
     # _BATCH_ID = 999
 

@@ -1132,14 +1132,16 @@ def insert_meta_record(uri, sourceId, sourceIdType, projectId):
 
     except Exception as e:
         logger.log_text("An exception occurred in insert_meta_record()")
+        print("about to log validator.project_id: " + str(validator.project_id))
+        print("about to log validator.batch_id: " + str(validator.batch_id))
         # Is the exception because of a duplicate key error? If so, lookup the ID of the meta record and perform the insert into the lookup table
-        if "non_dup_records" in e.__str__():
-            logger.log_text("non_dup_record!")
-            metaId = lookup_meta_record(sourceId, sourceIdType)
-            return insert_lookup_record(metaId, validator.project_id, validator.batch_id)
-        else:
-            logger.log_text(e.__str__())
-            logger.log_text("NOT! non_dup_record!")
+        # if "non_dup_records" in e.__str__():
+        #     logger.log_text("non_dup_record!")
+        #     metaId = lookup_meta_record(sourceId, sourceIdType)
+        #     return insert_lookup_record(metaId, validator.project_id, validator.batch_id)
+        # else:
+        #     logger.log_text(e.__str__())
+        #     logger.log_text("NOT! non_dup_record!")
         metaRecordId = -1
     
     return metaRecordId
