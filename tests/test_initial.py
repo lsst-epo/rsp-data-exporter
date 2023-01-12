@@ -67,5 +67,5 @@ def test_check_meta_record():
     _VENDOR_BATCH_ID = 55555
 
     meta_ids = main.insert_meta_records(_URLS, _VENDOR_BATCH_ID)
-    meta_id = main.lookup_meta_record(None, None, meta_ids[0].cit_sci_meta_id)
-    assert meta_id == 2
+    meta_id = main.lookup_meta_record(None, None, meta_ids[0])
+    assert meta_id["cit_sci_meta_id"] == 2
