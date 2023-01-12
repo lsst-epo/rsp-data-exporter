@@ -6,6 +6,8 @@ from google.cloud import logging
 TEST_ONLY = bool(os.environ.get('TEST_ONLY'))
 logging_client = logging.Client()
 log_name = "rsp-data-exporter"
+if TEST_ONLY == True:
+    log_name = "rsp-data-exporter-tests"
 logger = logging_client.logger(log_name)
 
 # Try to import the code relatively, which works fine when running live, but doesn't work for
@@ -1097,6 +1099,8 @@ def lookup_meta_record(sourceId, sourceIdType, meta_id = None):
             logger.log_text(str(len(meta_records)))
             return meta_records
     except Exception as e:
+        print("an exception occurred in lookup_meta_record!")
+        print(e.__str__())
         logger.log_text(e.__str__())
         return e
    
