@@ -1071,7 +1071,7 @@ def lookup_meta_record(sourceId, sourceIdType, meta_id = None):
     try:
         if meta_id == None:
             db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-            stmt = select(CitizenScienceMeta).where(CitizenScienceProjects.source_id == sourceId).where(CitizenScienceProjects.source_id_type == sourceIdType)
+            stmt = select(CitizenScienceMeta).where(CitizenScienceMeta.source_id == sourceId).where(CitizenScienceMeta.source_id_type == sourceIdType)
             results = db.execute(stmt)
             for row in results.scalars():
                 metaId = row.cit_sci_meta_id
