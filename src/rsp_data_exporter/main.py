@@ -1150,6 +1150,8 @@ def insert_lookup_record(metaRecordId, projectId, batchId):
         db_l.commit()
         db_l.close()
     except Exception as e:
+        print("exception in insert_lookup_record()!")
+        print(e.__str__())
         logger.log_text("An exception occurred while trying to insert lookup record!!")
         logger.log_text(e.__str__())
         return False

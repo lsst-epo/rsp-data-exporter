@@ -76,8 +76,8 @@ def test_check_meta_record_by_source_id():
     _SOURCE_ID_TYPE = "sourceId"
 
     main.insert_meta_records(_URLS, _VENDOR_BATCH_ID)
-    meta_records = main.lookup_meta_record(_VENDOR_BATCH_ID, _SOURCE_ID_TYPE)
-    assert len(meta_records) == 1
+    meta_record = main.lookup_meta_record(_VENDOR_BATCH_ID, _SOURCE_ID_TYPE)
+    assert meta_record > 1
 
 # Lookup record tests
 def test_create_lookup_record():
