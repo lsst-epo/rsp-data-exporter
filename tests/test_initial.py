@@ -97,7 +97,7 @@ def test_create_lookup_record():
     _OWNER_ID = main.create_new_owner_record(_EMAIL)
     _PROJECT_ID = main.create_new_project_record(_OWNER_ID, _VENDOR_BATCH_ID)
     _BATCH_ID = main.create_new_batch(_PROJECT_ID, _VENDOR_BATCH_ID)
-    _META_RECORD_ID = main.insert_meta_records(_URLS, _VENDOR_BATCH_ID)
+    _META_RECORD_ID = main.insert_meta_records(_URLS, _VENDOR_BATCH_ID)[0]
 
     # _META_RECORD_ID = 100
     # _PROJECT_ID = 1
@@ -114,7 +114,7 @@ def test_lookup_lookup_records():
     _OWNER_ID = main.create_new_owner_record(_EMAIL)
     _PROJECT_ID = main.create_new_project_record(_OWNER_ID, _VENDOR_BATCH_ID)
     _BATCH_ID = main.create_new_batch(_PROJECT_ID, _VENDOR_BATCH_ID)
-    _META_RECORD_ID = main.insert_meta_records(_URLS, _VENDOR_BATCH_ID)
+    _META_RECORD_ID = main.insert_meta_records(_URLS, _VENDOR_BATCH_ID)[0]
 
     # _META_RECORD_ID = 200
     # _PROJECT_ID = 1
