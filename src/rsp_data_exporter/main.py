@@ -1070,11 +1070,16 @@ def lookup_meta_record(sourceId, sourceIdType, meta_id = None):
     metaId = None
     try:
         if meta_id == None:
+            print("inside of the meta_id==None block")
             db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
             stmt = select(CitizenScienceMeta).where(CitizenScienceMeta.source_id == sourceId).where(CitizenScienceMeta.source_id_type == sourceIdType)
             results = db.execute(stmt)
+            print("about to loop over results")
             for row in results.scalars():
+                print("looping through results!")
                 metaId = row.cit_sci_meta_id
+                print("metaId: " + str(metaId))
+                print(str(row.__dict__)
 
             db.close()
 
