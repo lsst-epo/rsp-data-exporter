@@ -62,10 +62,37 @@ def test_create_meta_record():
     meta_ids = main.insert_meta_records(_URLS, _VENDOR_BATCH_ID)
     assert len(meta_ids) == 1
 
-def test_check_meta_record():
+def test_check_meta_record_by_meta_id():
     _URLS = ["http://some.fake.url/only/for/testing"]
     _VENDOR_BATCH_ID = 55555
 
     meta_ids = main.insert_meta_records(_URLS, _VENDOR_BATCH_ID)
     meta_records = main.lookup_meta_record(None, None, meta_ids[0])
     assert len(meta_records) == 1
+
+def test_check_meta_record_by_source_id():
+    _URLS = ["http://some.fake.url/only/for/testing"]
+    _VENDOR_BATCH_ID = 44444
+    _SOURCE_ID_TYPE = "sourceId"
+
+    main.insert_meta_records(_URLS, _VENDOR_BATCH_ID)
+    meta_records = main.lookup_meta_record(_VENDOR_BATCH_ID, _SOURCE_ID_TYPE)
+    assert len(meta_records) == 1
+
+# Lookup record tests
+def test_create_lookup_record():
+    _META_RECORD_ID = 100
+    _PROJECT_ID = 1
+    _BATCH_ID = 1
+
+    successful = main.insert_lookup_record(_META_RECORD_ID, _PROJECT_ID, _BATCH_ID)
+    assert successful == True
+
+def test_lookup_lookup_records():
+    _META_RECORD_ID = 100
+    _PROJECT_ID = 1
+    _BATCH_ID = 999
+
+    main.insert_lookup_record(_META_RECORD_ID, _PROJECT_ID, _BATCH_ID)
+    meta_ids = main.query_lookup_records(_PROJECT_ID, _BATCH_ID)
+    assert len(meta_ids) > 0

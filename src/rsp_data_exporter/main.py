@@ -115,9 +115,6 @@ def get_current_active_batch_id(project_id):
     return batch_id
 
 def query_lookup_records(project_id, batch_id):
-    logger.log_text("inside of query_lookup_records()")
-    logger.log_text("project_id: " + str(project_id))
-    logger.log_text("batch_id: " + str(batch_id))
     db = CitizenScienceProjMetaLookup.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
     query = select(CitizenScienceProjMetaLookup).where(CitizenScienceProjMetaLookup.cit_sci_proj_id == project_id).where(CitizenScienceProjMetaLookup.cit_sci_batch_id == int(batch_id))
     lookup_records = db.execute(query)
@@ -1068,6 +1065,7 @@ def lookup_owner_record(emailP):
 
 def lookup_meta_record(sourceId, sourceIdType, meta_id = None):
     meta_records = []
+    metaId = None
     try:
         if meta_id == None:
             db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
