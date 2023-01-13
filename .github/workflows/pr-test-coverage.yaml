@@ -65,4 +65,4 @@ jobs:
       run: source ./env/bin/activate && pip install -e .
 
     - name: Check test coverage
-      run: pwd && ls -l && python -m pytest –cov=tests/ –cov-fail-under=100
+      run: pwd && ls -l && python -m pytest –cov –cov-fail-under=100
