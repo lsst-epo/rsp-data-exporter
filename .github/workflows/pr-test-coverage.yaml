@@ -42,8 +42,14 @@ jobs:
         export_default_credentials: true
     
     - name: Get env
-      run: gcloud secrets versions access latest --secret=rsp-data-exporter-unit-test-config > .env && echo "GOOGLE_APPLICATION_CREDENTIALS=${{ secrets.DEV_SA_KEY }}" >> .env
-    
+      run: >
+        if [ ! -f ./.env]; then
+          echo ".env is missing! Recreating it now!"
+          gcloud secrets versions access latest --secret=rsp-data-exporter-unit-test-config > .env && echo "GOOGLE_APPLICATION_CREDENTIALS=${{ secrets.DEV_SA_KEY }}" >> .env
+        else
+          echo ".env file already exists!!"
+        fi
+
     - name: Create DB
       env:
         PGPASSWORD: postgres
@@ -59,4 +65,4 @@ jobs:
       run: source ./env/bin/activate && pip install -e .
 
     - name: Check test coverage
-      run: pytest –cov=src/ –cov-fail-under=100
+      run: pytest –cov=./src/ –cov-fail-under=100
