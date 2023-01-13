@@ -1070,17 +1070,12 @@ def lookup_meta_record(sourceId, sourceIdType, meta_id = None):
     metaId = None
     try:
         if meta_id == None:
-            print("inside of the meta_id==None block")
             db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
             stmt = select(CitizenScienceMeta).where(CitizenScienceMeta.source_id == sourceId).where(CitizenScienceMeta.source_id_type == sourceIdType)
             results = db.execute(stmt)
-            print("about to loop over results")
             for row in results.scalars():
-                print("looping through results!")
                 metaId = row.cit_sci_meta_id
-                print("metaId: " + str(metaId))
-                # print(str(row.__dict__))
-
+ 
             db.close()
 
             logger.log_text("about to log metaId (queried via sourceId/sourceIdType) in lookup_meta_record()")
@@ -1104,8 +1099,6 @@ def lookup_meta_record(sourceId, sourceIdType, meta_id = None):
             logger.log_text(str(len(meta_records)))
             return meta_records
     except Exception as e:
-        print("an exception occurred in lookup_meta_record!")
-        print(e.__str__())
         logger.log_text(e.__str__())
         return e
    
@@ -1135,15 +1128,9 @@ def insert_meta_record(uri, sourceId, sourceIdType, projectId):
         logger.log_text(str(metaRecordId))
         db.expunge_all()
         db.close()
-        print("about to print citizen_science_meta_record:")
-        print(str(citizen_science_meta_record.__dict__))
-        print("1. metaRecordId: " + str(metaRecordId))
-        print(type(metaRecordId))
-
     except Exception as e:
         logger.log_text("An exception occurred in insert_meta_record()")
-        print("about to log validator.project_id: " + str(validator.project_id))
-        print("about to log validator.batch_id: " + str(validator.batch_id))
+        # erosas: Removing soon
         # Is the exception because of a duplicate key error? If so, lookup the ID of the meta record and perform the insert into the lookup table
         # if "non_dup_records" in e.__str__():
         #     logger.log_text("non_dup_record!")
@@ -1154,7 +1141,6 @@ def insert_meta_record(uri, sourceId, sourceIdType, projectId):
         #     logger.log_text("NOT! non_dup_record!")
         metaRecordId = -1
     
-    print("2. metaRecordId: " + str(metaRecordId))
     return metaRecordId
 
 def insert_lookup_record(metaRecordId, projectId, batchId):
@@ -1167,10 +1153,6 @@ def insert_lookup_record(metaRecordId, projectId, batchId):
         db_l.commit()
         db_l.close()
     except Exception as e:
-        print("exception in insert_lookup_record()!")
-        print(e.__str__())
-        print("validator.batch_id: " + str(validator.batch_id))
-        print("validator.project_id: " + str(validator.project_id))
         logger.log_text("An exception occurred while trying to insert lookup record!!")
         logger.log_text(e.__str__())
         return False

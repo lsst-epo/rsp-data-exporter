@@ -12,3 +12,4 @@ lsst-resources[s3]
 lsst-daf-butler
 pytest
 pytest-dotenv
+pytest-cov
