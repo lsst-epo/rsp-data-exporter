@@ -82,6 +82,8 @@ def test_check_meta_record_by_source_id():
     _SOURCE_ID = 44444
     _SOURCE_ID_TYPE = "sourceId"
 
+    main.validator.project_id = _PROJECT_ID
+    main.validator.batch_id = _BATCH_ID
     meta_id = main.insert_meta_record(_URL, _SOURCE_ID, _SOURCE_ID_TYPE, None)
     meta_record = main.lookup_meta_record(_SOURCE_ID, _SOURCE_ID_TYPE)
     assert meta_record > 1
