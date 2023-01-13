@@ -78,11 +78,11 @@ def test_check_meta_record_by_source_id():
     _PROJECT_ID = main.create_new_project_record(_OWNER_ID, _VENDOR_BATCH_ID)
     _BATCH_ID = main.create_new_batch(_PROJECT_ID, _VENDOR_BATCH_ID)
 
-    _URLS = ["http://some.fake.url/only/for/testing"]
+    _URL = "http://some.fake.url/only/for/testing"
     _SOURCE_ID = 44444
     _SOURCE_ID_TYPE = "sourceId"
 
-    meta_id = main.insert_meta_records(_URLS, _SOURCE_ID)
+    meta_id = main.insert_meta_record(_URL, _SOURCE_ID, _SOURCE_ID_TYPE, None)
     meta_record = main.lookup_meta_record(_SOURCE_ID, _SOURCE_ID_TYPE)
     assert meta_record > 1
 
