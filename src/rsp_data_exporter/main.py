@@ -1079,12 +1079,12 @@ def lookup_meta_record(sourceId, sourceIdType, meta_id = None):
                 print("looping through results!")
                 metaId = row.cit_sci_meta_id
                 print("metaId: " + str(metaId))
-                print(str(row.__dict__))
+                # print(str(row.__dict__))
 
             db.close()
 
             logger.log_text("about to log metaId (queried via sourceId/sourceIdType) in lookup_meta_record()")
-            logger.log_text(metaId)
+            logger.log_text(str(metaId))
         else:
             db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
             stmt = select(CitizenScienceMeta).where(CitizenScienceMeta.cit_sci_meta_id == meta_id)
