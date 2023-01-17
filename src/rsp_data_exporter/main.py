@@ -6,6 +6,8 @@ from google.cloud import logging
 TEST_ONLY = bool(os.environ.get('TEST_ONLY'))
 logging_client = logging.Client()
 log_name = "rsp-data-exporter"
+if TEST_ONLY == True:
+    log_name = "rsp-data-exporter-tests"
 logger = logging_client.logger(log_name)
 
 # Try to import the code relatively, which works fine when running live, but doesn't work for
@@ -115,9 +117,6 @@ def get_current_active_batch_id(project_id):
     return batch_id
 
 def query_lookup_records(project_id, batch_id):
-    logger.log_text("inside of query_lookup_records()")
-    logger.log_text("project_id: " + str(project_id))
-    logger.log_text("batch_id: " + str(batch_id))
     db = CitizenScienceProjMetaLookup.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
     query = select(CitizenScienceProjMetaLookup).where(CitizenScienceProjMetaLookup.cit_sci_proj_id == project_id).where(CitizenScienceProjMetaLookup.cit_sci_batch_id == int(batch_id))
     lookup_records = db.execute(query)
@@ -544,10 +543,13 @@ def upload_cutout_arr(cutouts, i):
         
 def insert_meta_records(urls, vendor_project_id):
     time_mark(debug, "Start of metadata record insertion")
+    meta_ids = []
     for url in urls:
-        insert_meta_record(url, str(round(time.time() * 1000)) , 'sourceId', vendor_project_id)
+        meta_id = insert_meta_record(url, str(round(time.time() * 1000)) , 'sourceId', vendor_project_id)
+        if meta_id > 0:
+            meta_ids.append(meta_id)
     time_mark(debug, "End of metadata record insertion")
-    return
+    return meta_ids
 
 # Accepts the bucket name and filename to download and returns the path of the downloaded file
 def download_zip(bucket_name, filename, file = None, data_type = None):
@@ -1065,18 +1067,19 @@ def lookup_owner_record(emailP):
 
 def lookup_meta_record(sourceId, sourceIdType, meta_id = None):
     meta_records = []
+    metaId = None
     try:
         if meta_id == None:
             db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-            stmt = select(CitizenScienceMeta).where(CitizenScienceProjects.source_id == sourceId).where(CitizenScienceProjects.source_id_type == sourceIdType)
+            stmt = select(CitizenScienceMeta).where(CitizenScienceMeta.source_id == sourceId).where(CitizenScienceMeta.source_id_type == sourceIdType)
             results = db.execute(stmt)
             for row in results.scalars():
                 metaId = row.cit_sci_meta_id
-
+ 
             db.close()
 
             logger.log_text("about to log metaId (queried via sourceId/sourceIdType) in lookup_meta_record()")
-            logger.log_text(metaId)
+            logger.log_text(str(metaId))
         else:
             db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
             stmt = select(CitizenScienceMeta).where(CitizenScienceMeta.cit_sci_meta_id == meta_id)
@@ -1108,36 +1111,37 @@ def insert_meta_record(uri, sourceId, sourceIdType, projectId):
     edcVerId = round(time.time() * 1000)
     public = True
 
-    errorOccurred = False;
+    metaRecordId = None;
     try:
         db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
         db.expire_on_commit = False
         citizen_science_meta_record = CitizenScienceMeta(edc_ver_id=edcVerId, source_id=sourceId, source_id_type=sourceIdType, uri=uri, public=public)
         db.add(citizen_science_meta_record)
         db.commit()
-        db.expunge_all()
-        db.close()
-        metaRecordId = citizen_science_meta_record.cit_sci_meta_id
+        
+        metaRecordId = citizen_science_meta_record.cit_sci_meta_id 
         logger.log_text("About to call insert_lookup_record() the usual way in the try block")
         errorOccurred = insert_lookup_record(metaRecordId, validator.project_id, validator.batch_id)
         logger.log_text("errorOccurred:")
         logger.log_text(str(errorOccurred))
         logger.log_text("about to log metaRecordId")
         logger.log_text(str(metaRecordId))
-
+        db.expunge_all()
+        db.close()
     except Exception as e:
         logger.log_text("An exception occurred in insert_meta_record()")
+        # erosas: Removing soon
         # Is the exception because of a duplicate key error? If so, lookup the ID of the meta record and perform the insert into the lookup table
-        if "non_dup_records" in e.__str__():
-            logger.log_text("non_dup_record!")
-            metaId = lookup_meta_record(sourceId, sourceIdType)
-            return insert_lookup_record(metaId, validator.project_id, validator.batch_id)
-        else:
-            logger.log_text(e.__str__())
-            logger.log_text("NOT! non_dup_record!")
-        return False
+        # if "non_dup_records" in e.__str__():
+        #     logger.log_text("non_dup_record!")
+        #     metaId = lookup_meta_record(sourceId, sourceIdType)
+        #     return insert_lookup_record(metaId, validator.project_id, validator.batch_id)
+        # else:
+        #     logger.log_text(e.__str__())
+        #     logger.log_text("NOT! non_dup_record!")
+        metaRecordId = -1
     
-    return errorOccurred
+    return metaRecordId
 
 def insert_lookup_record(metaRecordId, projectId, batchId):
     logger.log_text("About to insert lookup record")
