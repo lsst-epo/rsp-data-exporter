@@ -67,7 +67,7 @@ db = None
 CLOSED_PROJECT_STATUSES = ["COMPLETE", "CANCELLED", "ABANDONED"]
 BAD_OWNER_STATUSES = ["BLOCKED", "DISABLED"]
 debug = False
-urls = []
+# urls = []
 
 def check_test_only_var():
     return TEST_ONLY
@@ -129,7 +129,7 @@ def query_lookup_records(project_id, batch_id):
     
     return meta_ids
 
-@app.route("/citizen-science-butler-test")
+# @app.route("/citizen-science-butler-test")
 def new_butler_test():
     # email = "erosas@lsst.org" # Add your primary email
     logger.log_text("got into /citizen-science-butler-test!")
@@ -236,13 +236,14 @@ def download_bucket_data_and_process():
             cutouts = download_zip(CLOUD_STORAGE_BUCKET_HIPS2FITS, guid + ".zip", guid)
     
             if validator.error is False:
-                urls = upload_cutouts(cutouts, vendor_project_id)
+                urls, meta_records = upload_cutouts(cutouts, vendor_project_id)
                 # manifest_url = upload_cutouts(cutouts, vendor_project_id)
 
                 if validator.error is False:
                 
                     manifest_url = build_and_upload_manifest(urls, email, "556677", CLOUD_STORAGE_CIT_SCI_PUBLIC, guid)
-                    update_meta_record_with_user_values()
+                    updated_meta_records = update_meta_records_with_user_values(meta_records)
+                    insert_meta_records(updated_meta_records)
                     response.status = "success"
                     response.manifest_url = manifest_url
     else:
@@ -275,48 +276,23 @@ def update_batch_record_with_manifest_url(manifest_url_p):
         logger.log_text(e.__str__())
     return
 
-def update_meta_record_with_user_values():
+def update_meta_records_with_user_values(meta_records):
     global validator
 
     logger.log_text("validator.mapped_manifest: ")
     logger.log_text(str(validator.mapped_manifest))
 
-    for filename in validator.mapped_manifest:
-        logger.log_text("looping over validator.mapped_manifest values!!!")
-        logger.log_text("validator.mapped_manifest.value: " + str(validator.mapped_manifest[filename]))
+    for record in meta_records:
+        filename = record.uri[record.uri.rfind("/") + 1:]
+        user_defined_data = validator.mapped_manifest[filename]
         edc_ver_id = validator.mapped_manifest[filename]["external_id"]
         object_id = validator.mapped_manifest[filename]["objectId"]
-        user_defined_data = validator.mapped_manifest[filename]
-
-        # Remove fields that are already added to bespoke fields in the table
         del user_defined_data["filename"]
         del user_defined_data["external_id"]
         del user_defined_data["objectId"]
-        logger.log_text("row after scrubbing fields: " + str(user_defined_data))
+        record.update_meta_fields(edc_ver_id, object_id, "objectId", str(user_defined_data))
 
-        try:
-            logger.log_text("about to attempt to update meta record with user defined values!!!")
-            db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-            db.expire_on_commit = False
-            db.synchronize_session = False
-            stmt = select(CitizenScienceMeta).where(CitizenScienceMeta.uri.like("%" + filename + "%"))
-            results = db.execute(stmt)
-            for row in results.scalars():                
-                row.edc_ver_id = edc_ver_id
-                row.source_id = object_id
-                row.source_id_type = "object_id"
-                row.user_defined_values = str(user_defined_data)
-                db.commit()
-            
-            db.close()
-            logger.log_text("done updating meta record with user defined values")
-        except Exception as e:
-            logger.log_text("An exception occurred while attempting to update the meta record with the user defined values!")
-            logger.log_text("logging exception")
-            logger.log_text(e.__str__())
-            logger.log_text("done logging exception")
-            
-    return
+    return meta_records
 
 def upload_csv(csv_path):
     logger.log_text("inside of upload_csv")
@@ -489,21 +465,17 @@ def create_dr_objects_records(csv_path, csv_url):
 
 # Note: plural
 def upload_cutouts(cutouts, vendor_project_id):
-    global debug, urls
+    global debug
 
     # Beginning of optimization code
     time_mark(debug, "Start of upload...")
     if len(cutouts) > 500: # Arbitrary threshold for threading
-        logger.log_text("inside of the upload_cutouts len(cutouts) IF code block")
         subset_count = round(len(np.array(cutouts)) / 250)
-        logger.log_text("subset_count: " + str(subset_count))
         sub_cutouts_arr = np.split(np.array(cutouts), subset_count) # create sub arrays divided by 1k cutouts
         threads = []
         for i, sub_arr in enumerate(sub_cutouts_arr):
-            logger.log_text("i : " + str(i));
             t = threading.Thread(target=upload_cutout_arr, args=(sub_arr,str(i),))
             threads.append(t)
-            logger.log_text("starting thread #" + str(i))
             threads[i].start()
         
         for thread in threads:
@@ -511,17 +483,18 @@ def upload_cutouts(cutouts, vendor_project_id):
             thread.join()
 
     else:
-        upload_cutout_arr(cutouts, str(1))
+        urls = upload_cutout_arr(cutouts, str(1))
     time_mark(debug, "End of upload...")
 
     time_mark(debug, "Start of upload & inserting of metadata...")
-    insert_meta_records(urls, vendor_project_id)
+    # insert_meta_records(urls, vendor_project_id)
+    meta_records = create_meta_records(urls, vendor_project_id)
     time_mark(debug, "End of inserting of metadata records")
-    return urls
+    return urls, meta_records
 
 # Note: singular 
 def upload_cutout_arr(cutouts, i):
-    global urls
+    urls = []
     gcs = storage.Client()
     bucket = gcs.bucket(CLOUD_STORAGE_CIT_SCI_PUBLIC)
 
@@ -539,17 +512,26 @@ def upload_cutout_arr(cutouts, i):
 
     logger.log_text("finished uploading thread #" + i)
 
-    return
+    return urls
         
-def insert_meta_records(urls, vendor_project_id):
-    time_mark(debug, "Start of metadata record insertion")
-    meta_ids = []
+def create_meta_records(urls, vendor_project_id):
+    meta_records = []
     for url in urls:
-        meta_id = insert_meta_record(url, str(round(time.time() * 1000)) , 'sourceId', vendor_project_id)
-        if meta_id > 0:
-            meta_ids.append(meta_id)
-    time_mark(debug, "End of metadata record insertion")
-    return meta_ids
+        edcVerId = round(time.time() * 1000)
+        public = True
+        meta_records.append(CitizenScienceMeta(edc_ver_id=edcVerId, uri=url, public=public))
+        pass
+    return meta_records
+
+# def insert_meta_records(urls, vendor_project_id):
+def insert_meta_records(meta_records):
+    logger.log_text("about to bulk insert meta records!!")
+    db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+    db.expire_on_commit = False
+    db.bulk_save_objects(meta_records)
+    db.commit()
+    logger.log_text("done bulk inserting meta records!")
+    return
 
 # Accepts the bucket name and filename to download and returns the path of the downloaded file
 def download_zip(bucket_name, filename, file = None, data_type = None):
@@ -568,14 +550,12 @@ def download_zip(bucket_name, filename, file = None, data_type = None):
     blob.download_to_filename(zipped_cutouts)
     time_mark(debug, "Download finished...")
 
-
-
     unzipped_cutouts_dir = "/tmp/" + file
     os.mkdir(unzipped_cutouts_dir)
     time_mark(debug, "Start of unzip....")
-    logger.log_text("rosas - about to log the /tmp directory contents")
-    rosas_test = str(glob.glob("/tmp/*"))
-    logger.log_text(rosas_test)
+    # logger.log_text("rosas - about to log the /tmp directory contents")
+    # rosas_test = str(glob.glob("/tmp/*"))
+    # logger.log_text(rosas_test)
 
 
     shutil.unpack_archive(zipped_cutouts, unzipped_cutouts_dir, "zip")
@@ -685,8 +665,6 @@ def build_and_upload_manifest(urls, email, sourceId, bucket, guid = ""):
                 csv_row = cutout_metadata[filename]
                 csv_row["location:1"] = url
                 writer.writerow(csv_row)
-
-    logger.log_text("done writing new manifest")
     
     manifestBlob = bucket.blob(guid + "/manifest.csv")
     
@@ -761,7 +739,7 @@ def create_edc_logger_record():
     return
 
 # To-do: Add vendor_batch_id to workflow of this function/route
-@app.route("/citizen-science-butler-ingest")
+# @app.route("/citizen-science-butler-ingest")
 def butler_retrieve_data_and_upload():
     global db
     db = init_connection_engine()
@@ -784,11 +762,7 @@ def butler_retrieve_data_and_upload():
     blob.upload_from_filename(str(filepath[0]))
 
     manifest_url = build_and_upload_manifest(['https://storage.googleapis.com/butler-config/astrocat.jpeg'], email, "000222444", CLOUD_STORAGE_BUCKET)
-    valid_project_metadata = validate_project_metadata(email, vendor_project_id)
 
-    if valid_project_metadata is True:
-        # Finally, insert meta records
-        insert_meta_record(manifest_url, source_id, 'sourceId', vendor_project_id)
     return manifest_url
         
 def create_new_batch(project_id, vendor_batch_id):
@@ -1103,45 +1077,6 @@ def lookup_meta_record(sourceId, sourceIdType, meta_id = None):
         return e
    
     return metaId
-
-def insert_meta_record(uri, sourceId, sourceIdType, projectId):
-    global debug, validator
-
-    # Temp hardcoded variables
-    edcVerId = round(time.time() * 1000)
-    public = True
-
-    metaRecordId = None;
-    try:
-        db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-        db.expire_on_commit = False
-        citizen_science_meta_record = CitizenScienceMeta(edc_ver_id=edcVerId, source_id=sourceId, source_id_type=sourceIdType, uri=uri, public=public)
-        db.add(citizen_science_meta_record)
-        db.commit()
-        
-        metaRecordId = citizen_science_meta_record.cit_sci_meta_id 
-        logger.log_text("About to call insert_lookup_record() the usual way in the try block")
-        errorOccurred = insert_lookup_record(metaRecordId, validator.project_id, validator.batch_id)
-        logger.log_text("errorOccurred:")
-        logger.log_text(str(errorOccurred))
-        logger.log_text("about to log metaRecordId")
-        logger.log_text(str(metaRecordId))
-        db.expunge_all()
-        db.close()
-    except Exception as e:
-        logger.log_text("An exception occurred in insert_meta_record()")
-        # erosas: Removing soon
-        # Is the exception because of a duplicate key error? If so, lookup the ID of the meta record and perform the insert into the lookup table
-        # if "non_dup_records" in e.__str__():
-        #     logger.log_text("non_dup_record!")
-        #     metaId = lookup_meta_record(sourceId, sourceIdType)
-        #     return insert_lookup_record(metaId, validator.project_id, validator.batch_id)
-        # else:
-        #     logger.log_text(e.__str__())
-        #     logger.log_text("NOT! non_dup_record!")
-        metaRecordId = -1
-    
-    return metaRecordId
 
 def insert_lookup_record(metaRecordId, projectId, batchId):
     logger.log_text("About to insert lookup record")
