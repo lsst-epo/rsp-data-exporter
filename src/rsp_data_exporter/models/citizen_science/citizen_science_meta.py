@@ -23,3 +23,9 @@ class CitizenScienceMeta(Base):
             engine.dialect.description_encoding = None
             Session = sessionmaker(bind=engine)
             return Session()
+    
+    def update_meta_fields(self, edc_ver_id, source_id, source_id_type, user_defined_data):
+          self.edc_ver_id = edc_ver_id
+          self.source_id = source_id
+          self.source_id_type = source_id_type
+          self.user_defined_values = user_defined_data
