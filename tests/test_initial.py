@@ -64,7 +64,7 @@ def test_create_meta_record():
     _SOURCE_ID_TYPE = "objectId"
     _USER_DEFINED_VALUES = { "just_a" : "test" }
 
-    meta_ids = main.insert_meta_records([CitizenScienceMeta(edc_ver_id=_EDC_VER_ID, uri=_URL, public=_PUBLIC, object_id=_SOURCE_ID, source_id_type=_SOURCE_ID_TYPE, user_defined_values=str(_USER_DEFINED_VALUES))])
+    meta_ids = main.insert_meta_records([CitizenScienceMeta(edc_ver_id=_EDC_VER_ID, uri=_URL, public=_PUBLIC, source_id=_SOURCE_ID, source_id_type=_SOURCE_ID_TYPE, user_defined_values=str(_USER_DEFINED_VALUES))])
     assert len(meta_ids) == 1
 
 def test_check_meta_record_by_meta_id():
