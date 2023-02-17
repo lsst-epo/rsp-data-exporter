@@ -67,7 +67,6 @@ db = None
 CLOSED_PROJECT_STATUSES = ["COMPLETE", "CANCELLED", "ABANDONED"]
 BAD_OWNER_STATUSES = ["BLOCKED", "DISABLED"]
 debug = False
-# urls = []
 
 def check_test_only_var():
     return TEST_ONLY
@@ -237,13 +236,13 @@ def download_bucket_data_and_process():
     
             if validator.error is False:
                 urls, meta_records = upload_cutouts(cutouts, vendor_project_id)
-                # manifest_url = upload_cutouts(cutouts, vendor_project_id)
 
-                if validator.error is False:
-                
+                if validator.error is False:                
                     manifest_url = build_and_upload_manifest(urls, email, "556677", CLOUD_STORAGE_CIT_SCI_PUBLIC, guid)
                     updated_meta_records = update_meta_records_with_user_values(meta_records)
-                    insert_meta_records(updated_meta_records)
+                    meta_records_with_id = insert_meta_records(updated_meta_records)
+                    lookup_status = insert_lookup_records(meta_records_with_id, validator.project_id, validator.batch_id)
+                    logger.log_text("lookup_status: " + str(lookup_status))
                     response.status = "success"
                     response.manifest_url = manifest_url
     else:
@@ -290,7 +289,7 @@ def update_meta_records_with_user_values(meta_records):
         del user_defined_data["filename"]
         del user_defined_data["external_id"]
         del user_defined_data["objectId"]
-        record.update_meta_fields(edc_ver_id, object_id, "objectId", str(user_defined_data))
+        record.set_fields(edc_ver_id=edc_ver_id, object_id=object_id, source_id_type="objectId", user_defined_values=str(user_defined_data))
 
     return meta_records
 
@@ -463,7 +462,6 @@ def create_dr_objects_records(csv_path, csv_url):
             logger.log_text(e.__str__())
     return
 
-# Note: plural
 def upload_cutouts(cutouts, vendor_project_id):
     global debug
 
@@ -491,8 +489,7 @@ def upload_cutouts(cutouts, vendor_project_id):
     meta_records = create_meta_records(urls, vendor_project_id)
     time_mark(debug, "End of inserting of metadata records")
     return urls, meta_records
-
-# Note: singular 
+ 
 def upload_cutout_arr(cutouts, i):
     urls = []
     gcs = storage.Client()
@@ -523,15 +520,19 @@ def create_meta_records(urls, vendor_project_id):
         pass
     return meta_records
 
-# def insert_meta_records(urls, vendor_project_id):
 def insert_meta_records(meta_records):
     logger.log_text("about to bulk insert meta records!!")
     db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
     db.expire_on_commit = False
-    db.bulk_save_objects(meta_records)
+    db.bulk_save_objects(meta_records, return_defaults=True)
     db.commit()
+    db.flush()
+
+    logger.log_text("about to loop through meta_records:")
+    for record in meta_records:
+        logger.log_text("key: " + str(record.cit_sci_meta_id))
     logger.log_text("done bulk inserting meta records!")
-    return
+    return meta_records
 
 # Accepts the bucket name and filename to download and returns the path of the downloaded file
 def download_zip(bucket_name, filename, file = None, data_type = None):
@@ -1078,15 +1079,18 @@ def lookup_meta_record(sourceId, sourceIdType, meta_id = None):
    
     return metaId
 
-def insert_lookup_record(metaRecordId, projectId, batchId):
+def insert_lookup_records(meta_records, project_id, batch_id):
     logger.log_text("About to insert lookup record")
+    lookup_records = []
+
+    for record in meta_records:
+        lookup_records.append(CitizenScienceProjMetaLookup(cit_sci_proj_id=project_id, cit_sci_meta_id=record.cit_sci_meta_id, cit_sci_batch_id=batch_id))
+
     try:
-        db_l = CitizenScienceProjMetaLookup.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-        db_l.expire_on_commit = False
-        citizen_science_proj_meta_lookup_record = CitizenScienceProjMetaLookup(cit_sci_proj_id=projectId, cit_sci_meta_id=metaRecordId, cit_sci_batch_id=batchId)
-        db_l.add(citizen_science_proj_meta_lookup_record)
-        db_l.commit()
-        db_l.close()
+        db = CitizenScienceProjMetaLookup.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        db.bulk_save_objects(lookup_records)
+        db.commit()
+        db.flush()
     except Exception as e:
         logger.log_text("An exception occurred while trying to insert lookup record!!")
         logger.log_text(e.__str__())
