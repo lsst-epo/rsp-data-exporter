@@ -485,8 +485,7 @@ def upload_cutouts(cutouts, vendor_project_id):
     time_mark(debug, "End of upload...")
 
     time_mark(debug, "Start of upload & inserting of metadata...")
-    # insert_meta_records(urls, vendor_project_id)
-    meta_records = create_meta_records(urls, vendor_project_id)
+    meta_records = create_meta_records(urls)
     time_mark(debug, "End of inserting of metadata records")
     return urls, meta_records
  
@@ -511,7 +510,7 @@ def upload_cutout_arr(cutouts, i):
 
     return urls
         
-def create_meta_records(urls, vendor_project_id):
+def create_meta_records(urls):
     meta_records = []
     for url in urls:
         edcVerId = round(time.time() * 1000)
@@ -522,15 +521,13 @@ def create_meta_records(urls, vendor_project_id):
 
 def insert_meta_records(meta_records):
     logger.log_text("about to bulk insert meta records!!")
+
     db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
     db.expire_on_commit = False
     db.bulk_save_objects(meta_records, return_defaults=True)
     db.commit()
     db.flush()
 
-    logger.log_text("about to loop through meta_records:")
-    for record in meta_records:
-        logger.log_text("key: " + str(record.cit_sci_meta_id))
     logger.log_text("done bulk inserting meta records!")
     return meta_records
 

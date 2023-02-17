@@ -1,8 +1,9 @@
 # import unittest
 import pytest, os
 from dotenv import load_dotenv
-
 from rsp_data_exporter import main
+from rsp_data_exporter.models.citizen_science.citizen_science_meta import CitizenScienceMeta
+
 load_dotenv()
 
 # If pytest is working fine then this test will always execute successfully
@@ -56,10 +57,14 @@ def test_check_batch_status():
 
 # Meta record tests
 def test_create_meta_record():
-    _URLS = ["http://some.fake.url/only/for/testing"]
-    _VENDOR_BATCH_ID = 66666
+    _URL = "http://some.fake.url/only/for/testing"
+    _EDC_VER_ID = 123123123
+    _PUBLIC = True
+    _SOURCE_ID = 321321321
+    _SOURCE_ID_TYPE = "objectId"
+    _USER_DEFINED_VALUES = { "just_a" : "test" }
 
-    meta_ids = main.insert_meta_records(_URLS, _VENDOR_BATCH_ID)
+    meta_ids = main.insert_meta_records([CitizenScienceMeta(edc_ver_id=_EDC_VER_ID, uri=_URL, public=_PUBLIC, object_id=_SOURCE_ID, source_id_type=_SOURCE_ID_TYPE, user_defined_values=str(_USER_DEFINED_VALUES))])
     assert len(meta_ids) == 1
 
 def test_check_meta_record_by_meta_id():
