@@ -104,26 +104,39 @@ def test_check_meta_record_by_source_id():
 def test_create_lookup_record():
     _EMAIL = "fake@email.tv"
     _VENDOR_BATCH_ID = 22333
-    _URLS = ["http://some.fake.url/only/for/testing"]
+    
+    _URL = "http://some.fake.url/only/for/testing"
+    _EDC_VER_ID = 123123123
+    _PUBLIC = True
+    _SOURCE_ID = 321321321
+    _SOURCE_ID_TYPE = "objectId"
+    _USER_DEFINED_VALUES = { "just_a" : "test" }
 
     _OWNER_ID = main.create_new_owner_record(_EMAIL)
     _PROJECT_ID = main.create_new_project_record(_OWNER_ID, _VENDOR_BATCH_ID)
     _BATCH_ID = main.create_new_batch(_PROJECT_ID, _VENDOR_BATCH_ID)
-    _META_RECORD_ID = main.insert_meta_records(_URLS, _VENDOR_BATCH_ID)[0]
 
-    successful = main.insert_lookup_record(_META_RECORD_ID, _PROJECT_ID, _BATCH_ID)
+    _META_RECORDS = main.insert_meta_records([CitizenScienceMeta(edc_ver_id=_EDC_VER_ID, uri=_URL, public=_PUBLIC, source_id=_SOURCE_ID, source_id_type=_SOURCE_ID_TYPE, user_defined_values=str(_USER_DEFINED_VALUES))])
+
+    successful = main.insert_lookup_records(_META_RECORDS, _PROJECT_ID, _BATCH_ID)
     assert successful == True
 
 def test_lookup_lookup_records():
     _EMAIL = "fake@email.ca"
     _VENDOR_BATCH_ID = 11122
-    _URLS = ["http://some.fake.url/only/for/testing"]
+    
+    _URL = "http://some.fake.url/only/for/testing"
+    _EDC_VER_ID = 123123123
+    _PUBLIC = True
+    _SOURCE_ID = 321321321
+    _SOURCE_ID_TYPE = "objectId"
+    _USER_DEFINED_VALUES = { "just_a" : "test" }
 
     _OWNER_ID = main.create_new_owner_record(_EMAIL)
     _PROJECT_ID = main.create_new_project_record(_OWNER_ID, _VENDOR_BATCH_ID)
     _BATCH_ID = main.create_new_batch(_PROJECT_ID, _VENDOR_BATCH_ID)
-    _META_RECORD_ID = main.insert_meta_records(_URLS, _VENDOR_BATCH_ID)[0]
+    _META_RECORDS = main.insert_meta_records([CitizenScienceMeta(edc_ver_id=_EDC_VER_ID, uri=_URL, public=_PUBLIC, source_id=_SOURCE_ID, source_id_type=_SOURCE_ID_TYPE, user_defined_values=str(_USER_DEFINED_VALUES))])
 
-    main.insert_lookup_record(_META_RECORD_ID, _PROJECT_ID, _BATCH_ID)
+    main.insert_lookup_records(_META_RECORDS, _PROJECT_ID, _BATCH_ID)
     meta_ids = main.query_lookup_records(_PROJECT_ID, _BATCH_ID)
     assert len(meta_ids) > 0
