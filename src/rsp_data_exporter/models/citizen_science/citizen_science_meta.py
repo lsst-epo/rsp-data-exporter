@@ -24,8 +24,12 @@ class CitizenScienceMeta(Base):
             Session = sessionmaker(bind=engine)
             return Session()
     
-    def update_meta_fields(self, edc_ver_id, source_id, source_id_type, user_defined_data):
-          self.edc_ver_id = edc_ver_id
-          self.source_id = source_id
-          self.source_id_type = source_id_type
-          self.user_defined_values = user_defined_data
+    def set_fields(self, **kwargs):
+        if "edc_ver_id" in kwargs:
+            self.edc_ver_id = kwargs["edc_ver_id"]
+        if "source_id" in kwargs:
+            self.source_id = kwargs["source_id"]
+        if "source_id_type" in kwargs:
+          self.source_id_type = kwargs["source_id_type"]
+        if "user_defined_values" in kwargs:
+            self.user_defined_values = kwargs["user_defined_values"]
