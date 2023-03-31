@@ -285,11 +285,11 @@ def update_meta_records_with_user_values(meta_records):
         filename = record.uri[record.uri.rfind("/") + 1:]
         user_defined_data = validator.mapped_manifest[filename]
         edc_ver_id = validator.mapped_manifest[filename]["external_id"]
-        object_id = validator.mapped_manifest[filename]["objectId"]
+        source_id = validator.mapped_manifest[filename]["sourceId"]
         del user_defined_data["filename"]
         del user_defined_data["external_id"]
-        del user_defined_data["objectId"]
-        record.set_fields(edc_ver_id=edc_ver_id, object_id=object_id, source_id_type="objectId", user_defined_values=str(user_defined_data))
+        del user_defined_data["sourceId"]
+        record.set_fields(edc_ver_id=edc_ver_id, source_id=source_id, source_id_type="objectId", user_defined_values=str(user_defined_data))
 
     return meta_records
 
@@ -632,7 +632,13 @@ def build_and_upload_manifest(urls, email, sourceId, bucket, guid = ""):
                 logger.log_text(str(row))
                 column_names = row
                 filename_idx = column_names.index("filename")
-                column_names[column_names.index("edc_ver_id")] = "external_id"
+                # column_names[column_names.index("edc_ver_id")] = "external_id"
+
+                # Add URL column header
+                column_names.append("location:1")
+                # Add edc_ver_id as external_id column header
+                column_names.append("external_id")
+
                 first = False
             else:
                 # Set new key for row
@@ -644,13 +650,19 @@ def build_and_upload_manifest(urls, email, sourceId, bucket, guid = ""):
                     metadata[column_names[c_idx]] = col
                     c_idx = c_idx + 1
                 
+                # Add the edc_ver_id
+                logger.log_text(f"logging edc_ver_id for filename: {filename}")
+                edc_ver_id = round(time.time() * 1000) + 1
+                logger.log_text(f"edc_ver_id: {edc_ver_id}")
+                metadata["edc_ver_id"] = edc_ver_id
+
+                # Map metadata row to filename key
                 cutout_metadata[filename] = metadata
     validator.mapped_manifest = cutout_metadata
 
     # loop over urls
     logger.log_text("about to write new manifest file")
     with open('/tmp/' + guid + '/manifest.csv', 'w', newline='') as csvfile:
-        column_names.append("location:1")
         writer = csv.DictWriter(csvfile, fieldnames=column_names)
 
         writer.writeheader()
@@ -660,8 +672,12 @@ def build_and_upload_manifest(urls, email, sourceId, bucket, guid = ""):
             filename = url_list[len(url_list)-1]
 
             if filename in cutout_metadata:
+                logger.log_text("about to log cutout_metadata[filename]")
+                logger.log_text(str(cutout_metadata[filename]))
                 csv_row = cutout_metadata[filename]
                 csv_row["location:1"] = url
+                csv_row["external_id"] = cutout_metadata[filename]["edc_ver_id"]
+                csv_row.pop("edc_ver_id")
                 writer.writerow(csv_row)
     
     manifestBlob = bucket.blob(guid + "/manifest.csv")
