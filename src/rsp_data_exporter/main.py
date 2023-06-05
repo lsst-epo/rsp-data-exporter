@@ -618,7 +618,7 @@ def build_and_upload_manifest(urls, email, sourceId, bucket, guid = ""):
     bucket = gcs.bucket(bucket)
 
     # list to store the names of columns
-    column_names = None
+    column_names = []
     cutout_metadata = {}
     filename_idx = None
 
@@ -628,7 +628,6 @@ def build_and_upload_manifest(urls, email, sourceId, bucket, guid = ""):
     with open('/tmp/' + guid + '/metadata.csv', 'r') as csv_file:
         csv_reader = csv.reader(csv_file, delimiter = ',')
         has_flipbook_columns = False # by default
-        # flipbook_cols = []
     
         first = True
         # loop to iterate through the rows of csv
@@ -636,21 +635,18 @@ def build_and_upload_manifest(urls, email, sourceId, bucket, guid = ""):
             
             # adding the first row
             if first == True:
+                column_names += row
+                
+                # Add edc_ver_id as external_id column header
+                column_names.append("external_id")
+
+                filename_idx = column_names.index("filename")
+
                 if "location:image_0" in row and "location:image_1" in row: # has two images at a minimum
                     has_flipbook_columns = True
                 else:
                     # Add URL column header
                     column_names.append("location:1")
-                logger.log_text("about to log headers")
-                logger.log_text(str(row))
-                column_names = row
-                filename_idx = column_names.index("filename")
-                # column_names[column_names.index("edc_ver_id")] = "external_id"
-
-                
-                # Add edc_ver_id as external_id column header
-                column_names.append("external_id")
-
                 first = False
             else:
                 # Set new key for row
@@ -679,17 +675,14 @@ def build_and_upload_manifest(urls, email, sourceId, bucket, guid = ""):
 
     with open('/tmp/' + guid + '/manifest.csv', 'w', newline='') as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=column_names)
-
         writer.writeheader()
 
         for url in urls:
+            
             url_list = url.split("/")
-            # filename = url_list[len(url_list)-1]
             filename = url_list.pop()
 
             if filename in cutout_metadata:
-                logger.log_text("about to log cutout_metadata[filename]")
-                logger.log_text(str(cutout_metadata[filename]))
                 csv_row = cutout_metadata[filename]
                 csv_row["external_id"] = cutout_metadata[filename]["edc_ver_id"]
                 csv_row.pop("edc_ver_id")
@@ -699,16 +692,12 @@ def build_and_upload_manifest(urls, email, sourceId, bucket, guid = ""):
                         if "image_" in col:
                             csv_row[col] = '/'.join(url_list) + "/" + csv_row[col]
                     del csv_row["filename"]
-                    logger.log_text("logging flipbook manifest row after editing:")
-                    logger.log_text(str(csv_row))
                 else:
                     csv_row["location:1"] = url
 
                 writer.writerow(csv_row)
     
     manifestBlob = bucket.blob(guid + "/manifest.csv")
-    
-
     logger.log_text("about to upload the new manifest to GCS")
     manifestBlob.upload_from_filename("/tmp/" + guid + "/manifest.csv")
     update_batch_record_with_manifest_url(manifestBlob.public_url)
