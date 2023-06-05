@@ -283,14 +283,16 @@ def update_meta_records_with_user_values(meta_records):
 
     for record in meta_records:
         filename = record.uri[record.uri.rfind("/") + 1:]
-        user_defined_data = validator.mapped_manifest[filename]
-        edc_ver_id = validator.mapped_manifest[filename]["external_id"]
-        source_id = validator.mapped_manifest[filename]["sourceId"]
-        del user_defined_data["filename"]
-        del user_defined_data["external_id"]
-        del user_defined_data["sourceId"]
-        record.set_fields(edc_ver_id=edc_ver_id, source_id=source_id, source_id_type="objectId", user_defined_values=str(user_defined_data))
-
+        try:
+            user_defined_data = validator.mapped_manifest[filename]
+            edc_ver_id = validator.mapped_manifest[filename]["external_id"]
+            source_id = validator.mapped_manifest[filename]["sourceId"]
+            del user_defined_data["filename"]
+            del user_defined_data["external_id"]
+            del user_defined_data["sourceId"]
+            record.set_fields(edc_ver_id=edc_ver_id, source_id=source_id, source_id_type="objectId", user_defined_values=str(user_defined_data))
+        except Exception as e:
+            logger.log_text(f"SKIPPING: {filename} in update_meta_records_with_user_values()") 
     return meta_records
 
 def upload_csv(csv_path):
@@ -520,13 +522,17 @@ def create_meta_records(urls):
     return meta_records
 
 def insert_meta_records(meta_records):
-    logger.log_text("about to bulk insert meta records!!")
+    logger.log_text("about to bulk insert meta records in insert_meta_records()!!")
 
-    db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-    db.expire_on_commit = False
-    db.bulk_save_objects(meta_records, return_defaults=True)
-    db.commit()
-    db.flush()
+    try:
+        db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        db.expire_on_commit = False
+        db.bulk_save_objects(meta_records, return_defaults=True)
+        db.commit()
+        db.flush()
+    except Exception as e:
+        logger.log_text("an exception occurred in insert_meta_records!")
+        logger.log_text(e.__str__())
 
     logger.log_text("done bulk inserting meta records!")
     return meta_records
@@ -612,7 +618,7 @@ def build_and_upload_manifest(urls, email, sourceId, bucket, guid = ""):
     bucket = gcs.bucket(bucket)
 
     # list to store the names of columns
-    column_names = None
+    column_names = []
     cutout_metadata = {}
     filename_idx = None
 
@@ -621,6 +627,7 @@ def build_and_upload_manifest(urls, email, sourceId, bucket, guid = ""):
     logger.log_text("about to read the RSP manifest")
     with open('/tmp/' + guid + '/metadata.csv', 'r') as csv_file:
         csv_reader = csv.reader(csv_file, delimiter = ',')
+        has_flipbook_columns = False # by default
     
         first = True
         # loop to iterate through the rows of csv
@@ -628,17 +635,18 @@ def build_and_upload_manifest(urls, email, sourceId, bucket, guid = ""):
             
             # adding the first row
             if first == True:
-                logger.log_text("about to log headers")
-                logger.log_text(str(row))
-                column_names = row
-                filename_idx = column_names.index("filename")
-                # column_names[column_names.index("edc_ver_id")] = "external_id"
-
-                # Add URL column header
-                column_names.append("location:1")
+                column_names += row
+                
                 # Add edc_ver_id as external_id column header
                 column_names.append("external_id")
 
+                filename_idx = column_names.index("filename")
+
+                if "location:image_0" in row and "location:image_1" in row: # has two images at a minimum
+                    has_flipbook_columns = True
+                else:
+                    # Add URL column header
+                    column_names.append("location:1")
                 first = False
             else:
                 # Set new key for row
@@ -662,27 +670,34 @@ def build_and_upload_manifest(urls, email, sourceId, bucket, guid = ""):
 
     # loop over urls
     logger.log_text("about to write new manifest file")
+    if has_flipbook_columns == True:
+        column_names.remove("filename")
+
     with open('/tmp/' + guid + '/manifest.csv', 'w', newline='') as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=column_names)
-
         writer.writeheader()
 
         for url in urls:
+            
             url_list = url.split("/")
-            filename = url_list[len(url_list)-1]
+            filename = url_list.pop()
 
             if filename in cutout_metadata:
-                logger.log_text("about to log cutout_metadata[filename]")
-                logger.log_text(str(cutout_metadata[filename]))
                 csv_row = cutout_metadata[filename]
-                csv_row["location:1"] = url
                 csv_row["external_id"] = cutout_metadata[filename]["edc_ver_id"]
                 csv_row.pop("edc_ver_id")
+                
+                if has_flipbook_columns == True:
+                    for col in column_names:
+                        if "image_" in col:
+                            csv_row[col] = '/'.join(url_list) + "/" + csv_row[col]
+                    del csv_row["filename"]
+                else:
+                    csv_row["location:1"] = url
+
                 writer.writerow(csv_row)
     
     manifestBlob = bucket.blob(guid + "/manifest.csv")
-    
-
     logger.log_text("about to upload the new manifest to GCS")
     manifestBlob.upload_from_filename("/tmp/" + guid + "/manifest.csv")
     update_batch_record_with_manifest_url(manifestBlob.public_url)
