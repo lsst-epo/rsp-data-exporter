@@ -625,7 +625,7 @@ def build_and_upload_manifest(urls, email, sourceId, bucket, guid = ""):
     # Read the manifest that came from the RSP and store it in a dict with 
     # the filename as the key
     logger.log_text("about to read the RSP manifest")
-    with open('/tmp/' + guid + '/metadata.csv', 'r') as csv_file:
+    with open('/tmp/' + guid + '/manifest.csv', 'r') as csv_file:
         csv_reader = csv.reader(csv_file, delimiter = ',')
         has_flipbook_columns = False # by default
     
@@ -673,6 +673,7 @@ def build_and_upload_manifest(urls, email, sourceId, bucket, guid = ""):
     if has_flipbook_columns == True:
         column_names.remove("filename")
 
+    # About to process the Zooniverse manifests
     with open('/tmp/' + guid + '/manifest.csv', 'w', newline='') as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=column_names)
         writer.writeheader()
