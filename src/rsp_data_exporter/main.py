@@ -184,67 +184,97 @@ def check_status_of_previously_executed_ingest():
     res = json.dumps(response.__dict__)
     return res
 
-@app.route("/citizen-science-bucket-ingest")
-def download_bucket_data_and_process():
-    logger.log_text("inside of the current code!!!!")
+@app.route("/citizen-science-tabular-ingest")
+def download_tabular_data_and_process():
+    logger.log_text("/citizen-science-tabular-ingest hit!")
     global response, validator, debug, urls
     guid = request.args.get("guid")
     email = request.args.get("email")
     vendor_project_id = request.args.get("vendor_project_id")
     vendor_batch_id = request.args.get("vendor_batch_id")
-    data_type = request.args.get("data_type")
     debug = bool(request.args.get("debug"))
-    data_format = request.args.get("table")
     response = DataExporterResponse()
     response.messages = []
     validator = CitizenScienceValidator()
     urls = []
 
     time_mark(debug, __name__)
-    
-    if data_type != None:
-        logger.log_text("logging data_type: " + data_type)
+    validate_project_metadata(email, vendor_project_id, vendor_batch_id) 
+
+    logger.log_text("just validated project metadata")
+    if validator.error is False:
+        logger.log_text("validator.error is False!")
+
+        tabular_records = download_zip(CLOUD_STORAGE_BUCKET_HIPS2FITS , "manifest.csv", guid, True)
+        # to-do: Upload CSV?
+        logger.log_text("about to call upload_csv()")
+        manifest_url = upload_csv("/tmp/" + guid + "/manifest.csv")
+        logger.log_text("done running upload_csv()")
+        # if data_format == "objects":
+        #     logger.log_text("data_format == object, about to call create_dr_object_records")
+        #     create_dr_objects_records(csv_path, url)
+        # elif data_format == "diaobjects":
+        #     logger.log_text("data_format == object, about to call create_dr_diaobject_records")
+        #     create_dr_diaobject_records(csv_path, url)
+        # elif data_format == "forcedsources":
+        #     logger.log_text("data_format == object, about to call create_dr_forcedsource_records")
+        #     create_dr_forcedsource_records(csv_path, url)
+        # else:
+        #     logger.log_text("data_format != object!!!")
+        # manifest_url = transfer_tabular_manifest(urls, CLOUD_STORAGE_CIT_SCI_PUBLIC, guid)
+        # updated_meta_records = update_meta_records_with_user_values(meta_records)
+        tabular_meta_records = create_tabular_meta_records(tabular_records)
+        meta_records_with_id = insert_meta_records(tabular_meta_records)
+        lookup_status = insert_lookup_records(meta_records_with_id, validator.project_id, validator.batch_id)
+        logger.log_text("lookup_status: " + str(lookup_status))
+        response.status = "success"
+        response.manifest_url = manifest_url
     else:
-        logger.log_text("data_type is None")
-        # Only validate data as part of the the citizen science data pipeline
-        validate_project_metadata(email, vendor_project_id, vendor_batch_id) 
+        logger.log_text("validator.error is True!")
+        response.status = "error"
+        if response.messages == None or len(response.messages) == 0:
+            response.messages.append("An error occurred while processing the data batch, please try again later.")
+
+    res = json.dumps(response.__dict__)
+    time_mark(debug, "Done processing, return response to notebook aspect")
+    return res
+
+@app.route("/citizen-science-image-ingest")
+def download_image_data_and_process():
+    logger.log_text("/citizen-science-image-ingest hit!")
+    global response, validator, debug, urls
+    guid = request.args.get("guid")
+    email = request.args.get("email")
+    vendor_project_id = request.args.get("vendor_project_id")
+    vendor_batch_id = request.args.get("vendor_batch_id")
+    debug = bool(request.args.get("debug"))
+    response = DataExporterResponse()
+    response.messages = []
+    validator = CitizenScienceValidator()
+    urls = []
+
+    time_mark(debug, __name__)
+
+    validate_project_metadata(email, vendor_project_id, vendor_batch_id) 
     
     logger.log_text("just validated project metadata")
     if validator.error is False:
         logger.log_text("validator.error is False!")
-        if data_type != None and data_type == "TABULAR_DATA":
-            csv_path = download_zip(CLOUD_STORAGE_BUCKET_HIPS2FITS , guid + ".zip", guid, data_type)[0]
-            # to-do: Upload CSV?
-            logger.log_text("about to call upload_csv()")
-            url = upload_csv(csv_path)
-            logger.log_text("done running upload_csv()")
-            if data_format == "objects":
-                logger.log_text("data_format == object, about to call create_dr_object_records")
-                create_dr_objects_records(csv_path, url)
-            elif data_format == "diaobjects":
-                logger.log_text("data_format == object, about to call create_dr_diaobject_records")
-                create_dr_diaobject_records(csv_path, url)
-            elif data_format == "forcedsources":
-                logger.log_text("data_format == object, about to call create_dr_forcedsource_records")
-                create_dr_forcedsource_records(csv_path, url)
-            else:
-                logger.log_text("data_format != object!!!")
-
-        else: 
-            # astro cutouts data
-            cutouts = download_zip(CLOUD_STORAGE_BUCKET_HIPS2FITS, guid + ".zip", guid)
     
-            if validator.error is False:
-                urls, meta_records = upload_cutouts(cutouts, vendor_project_id)
+        # astro cutouts data
+        cutouts = download_zip(CLOUD_STORAGE_BUCKET_HIPS2FITS, guid + ".zip", guid)
 
-                if validator.error is False:                
-                    manifest_url = build_and_upload_manifest(urls, email, "556677", CLOUD_STORAGE_CIT_SCI_PUBLIC, guid)
-                    updated_meta_records = update_meta_records_with_user_values(meta_records)
-                    meta_records_with_id = insert_meta_records(updated_meta_records)
-                    lookup_status = insert_lookup_records(meta_records_with_id, validator.project_id, validator.batch_id)
-                    logger.log_text("lookup_status: " + str(lookup_status))
-                    response.status = "success"
-                    response.manifest_url = manifest_url
+        if validator.error is False:
+            urls, meta_records = upload_cutouts(cutouts, vendor_project_id)
+
+            if validator.error is False:                
+                manifest_url = build_and_upload_manifest(urls, CLOUD_STORAGE_CIT_SCI_PUBLIC, guid)
+                updated_meta_records = update_meta_records_with_user_values(meta_records)
+                meta_records_with_id = insert_meta_records(updated_meta_records)
+                lookup_status = insert_lookup_records(meta_records_with_id, validator.project_id, validator.batch_id)
+                logger.log_text("lookup_status: " + str(lookup_status))
+                response.status = "success"
+                response.manifest_url = manifest_url
     else:
         logger.log_text("validator.error is True!")
         response.status = "error"
@@ -274,6 +304,42 @@ def update_batch_record_with_manifest_url(manifest_url_p):
         logger.log_text("An exception occurred while attempting to update the batch record with the manifest URL!")
         logger.log_text(e.__str__())
     return
+
+def create_tabular_meta_records(tabular_records):
+    logger.log_text("Creating meta records for tabular dataset")
+    
+    meta_records = []
+    column_names = tabular_records.pop(0)
+    logger.log_text("logging column_names after pop:")
+    logger.log_text(str(column_names))
+
+    # column_names = column_names.split(",")
+    # logger.log_text("logging column_names after split:")
+    # logger.log_text(str(column_names))
+
+    # Source ID will be extracted directly
+    src_id_idx = column_names.index("sourceId")
+    column_names.pop(src_id_idx)
+
+    for row in tabular_records:
+        metadata = {}
+
+        # Extract the canonical fields so that all that is left are the user-defined values which can be joined
+        # row_arr = row.split(",")
+        source_id = row.pop(src_id_idx)
+        for c_idx, col in enumerate(row):
+            metadata[column_names[c_idx]] = col
+
+        user_defined_values = json.dumps(metadata)
+
+        logger.log_text("Logging user_defined_values for source_id: " + str(source_id))
+        logger.log_text(user_defined_values)
+
+        public = True
+        edc_ver_id = round(time.time() * 1000) + 1
+        meta_records.append(CitizenScienceMeta(edc_ver_id=edc_ver_id, source_id=source_id, source_id_type="objectId", public=public, user_defined_values=user_defined_values))
+    
+    return meta_records
 
 def update_meta_records_with_user_values(meta_records):
     global validator
@@ -538,58 +604,69 @@ def insert_meta_records(meta_records):
     return meta_records
 
 # Accepts the bucket name and filename to download and returns the path of the downloaded file
-def download_zip(bucket_name, filename, file = None, data_type = None):
+def download_zip(bucket_name, filename, guid, is_tabular_dataset = False):
     global response, validator, db, debug
     time_mark(debug, "Start of download zip")
     # Create a Cloud Storage client.
     gcs = storage.Client()
+    os.makedirs("/tmp/" + guid + "/", exist_ok=True)
+    if is_tabular_dataset == True:
+        filename = guid + "/" + filename
 
-    # Get the bucket that the file will be uploaded to.
+    logger.log_text("about to log bucket download name:")
+    logger.log_text(bucket_name)
+
     bucket = gcs.bucket(bucket_name)
 
     # Download the file to /tmp storage
+    logger.log_text("filename to download: " + filename)
     blob = bucket.blob(filename)
     zipped_cutouts = "/tmp/" + filename
     time_mark(debug, "Start of download...")
     blob.download_to_filename(zipped_cutouts)
     time_mark(debug, "Download finished...")
 
-    unzipped_cutouts_dir = "/tmp/" + file
-    os.mkdir(unzipped_cutouts_dir)
-    time_mark(debug, "Start of unzip....")
-    # logger.log_text("rosas - about to log the /tmp directory contents")
-    # rosas_test = str(glob.glob("/tmp/*"))
-    # logger.log_text(rosas_test)
-
-
-    shutil.unpack_archive(zipped_cutouts, unzipped_cutouts_dir, "zip")
-    time_mark(debug, "Unzip finished...")
-
-    # Count the number of objects and remove any files more than the allotted amount based on
-    # the RSP user's data rights approval status
-    time_mark(debug, "Start of dir count...")
-    files = os.listdir(unzipped_cutouts_dir)
-    time_mark(debug, "Dir count finished...")
-
-    max_objects_count = 100
-    if validator.data_rights_approved == True:
-        max_objects_count = 10000
-    else:
-        response.messages.append("Your project has not been approved by the data rights panel as of yet, as such you will not be able to send any additional data to Zooniverse until your project is approved.")
+    unzipped_cutouts_dir = "/tmp/" + guid
+    # os.mkdir(unzipped_cutouts_dir)
 
     # Deviate logic based on data type
-    if data_type != None and data_type == "TABULAR_DATA":
+    if is_tabular_dataset == True:
+        files = os.listdir(unzipped_cutouts_dir)
         csv_path = unzipped_cutouts_dir + "/" + files[0]
         logger.log_text("inside of TABULAR_DATA code block")
         # Get CSV file
         csv_file = open(csv_path, "rU")
         reader = csv.reader(csv_file, delimiter=',')
+
         logger.log_text("about to log CSV file contents")
+        tabular_records = []
         for row in reader:
             logger.log_text(str(row))
+            tabular_records.append(row)
         logger.log_text("done logging CSV file contents")
-        return [csv_path]
+
+        return tabular_records
     else:
+        time_mark(debug, "Start of unzip....")
+        # logger.log_text("rosas - about to log the /tmp directory contents")
+        # rosas_test = str(glob.glob("/tmp/*"))
+        # logger.log_text(rosas_test)
+
+        shutil.unpack_archive(zipped_cutouts, unzipped_cutouts_dir, "zip")
+        time_mark(debug, "Unzip finished...")
+
+        # Count the number of objects and remove any files more than the allotted amount based on
+        # the RSP user's data rights approval status
+        time_mark(debug, "Start of dir count...")
+        files = os.listdir(unzipped_cutouts_dir)
+        time_mark(debug, "Dir count finished...")
+
+        max_objects_count = 100
+        if validator.data_rights_approved == True:
+            max_objects_count = 10000
+        else:
+            response.messages.append("Your project has not been approved by the data rights panel as of yet, as such you will not be able to send any additional data to Zooniverse until your project is approved.")
+
         logger.log_text("Data is NOT in tabular format")
         if len(files) > max_objects_count:
             response.messages.append("Currently, a maximum of " + str(max_objects_count) + " objects is allowed per batch for your project - your batch of size " + str(len(files)) + " has been has been truncated and anything in excess of " + str(max_objects_count) + " objects has been removed.")
@@ -601,14 +678,30 @@ def download_zip(bucket_name, filename, file = None, data_type = None):
 
         # Now, limit the files sent to image files
         time_mark(debug, "Start of grabbing all the cutouts for return...")
-        pngs = glob.glob("/tmp/" + file + "/*.png")
-        jpegs = glob.glob("/tmp/" + file + "/*.jpeg")
-        jpgs = glob.glob("/tmp/" + file + "/*.jpg")
+        pngs = glob.glob("/tmp/" + guid + "/*.png")
+        jpegs = glob.glob("/tmp/" + guid + "/*.jpeg")
+        jpgs = glob.glob("/tmp/" + guid + "/*.jpg")
         cutouts = pngs + jpegs + jpgs
         time_mark(debug, "Grabbing cutouts finished...")
         return cutouts
 
-def build_and_upload_manifest(urls, email, sourceId, bucket, guid = ""):
+def transfer_tabular_manifest(bucket, guid):
+    global debug, validator
+    time_mark(debug, "In transfer tabular manifest")
+
+    # Create a Cloud Storage client.
+    gcs = storage.Client()
+
+    # Get the bucket that the file will be uploaded to.
+    bucket = gcs.bucket(bucket)
+
+    manifestBlob = bucket.blob(guid + "/manifest.csv")
+    logger.log_text("about to upload the new manifest to GCS")
+    manifestBlob.upload_from_filename("/tmp/" + guid + "/manifest.csv")
+    update_batch_record_with_manifest_url(manifestBlob.public_url)
+    return manifestBlob.public_url
+
+def build_and_upload_manifest(urls, bucket, guid = ""):
     global debug, validator
     time_mark(debug, "In build and upload manifest")
     # Create a Cloud Storage client.
@@ -625,7 +718,7 @@ def build_and_upload_manifest(urls, email, sourceId, bucket, guid = ""):
     # Read the manifest that came from the RSP and store it in a dict with 
     # the filename as the key
     logger.log_text("about to read the RSP manifest")
-    with open('/tmp/' + guid + '/metadata.csv', 'r') as csv_file:
+    with open('/tmp/' + guid + '/manifest.csv', 'r') as csv_file:
         csv_reader = csv.reader(csv_file, delimiter = ',')
         has_flipbook_columns = False # by default
     
@@ -790,7 +883,7 @@ def butler_retrieve_data_and_upload():
 
     blob.upload_from_filename(str(filepath[0]))
 
-    manifest_url = build_and_upload_manifest(['https://storage.googleapis.com/butler-config/astrocat.jpeg'], email, "000222444", CLOUD_STORAGE_BUCKET)
+    manifest_url = build_and_upload_manifest(['https://storage.googleapis.com/butler-config/astrocat.jpeg'], CLOUD_STORAGE_BUCKET)
 
     return manifest_url
         
