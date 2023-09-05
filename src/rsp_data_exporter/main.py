@@ -67,6 +67,7 @@ db = None
 CLOSED_PROJECT_STATUSES = ["COMPLETE", "CANCELLED", "ABANDONED"]
 BAD_OWNER_STATUSES = ["BLOCKED", "DISABLED"]
 debug = False
+VALID_OBJECT_ID_TYPES = ["DIRECT", "INDIRECT"]
 
 def check_test_only_var():
     return TEST_ONLY
@@ -318,15 +319,15 @@ def create_tabular_meta_records(tabular_records):
     # logger.log_text(str(column_names))
 
     # Source ID will be extracted directly
-    src_id_idx = column_names.index("sourceId")
-    column_names.pop(src_id_idx)
+    obj_id_idx = column_names.index("objectId")
+    column_names.pop(obj_id_idx)
 
     for row in tabular_records:
         metadata = {}
 
         # Extract the canonical fields so that all that is left are the user-defined values which can be joined
         # row_arr = row.split(",")
-        source_id = row.pop(src_id_idx)
+        source_id = row.pop(obj_id_idx)
         for c_idx, col in enumerate(row):
             metadata[column_names[c_idx]] = col
 
@@ -342,22 +343,52 @@ def create_tabular_meta_records(tabular_records):
     return meta_records
 
 def update_meta_records_with_user_values(meta_records):
-    global validator
+    global validator, response
 
     logger.log_text("validator.mapped_manifest: ")
     logger.log_text(str(validator.mapped_manifest))
 
+    logged_obj_type_msg = False
     for record in meta_records:
         filename = record.uri[record.uri.rfind("/") + 1:]
         try:
             user_defined_data = validator.mapped_manifest[filename]
             edc_ver_id = validator.mapped_manifest[filename]["external_id"]
-            source_id = validator.mapped_manifest[filename]["sourceId"]
+
+            object_id = None
+            if "objectId" in validator.mapped_manifest[filename]:
+                object_id = validator.mapped_manifest[filename]["objectId"]
+                del user_defined_data["objectId"]
+
+            object_id_type = None
+            if "objectIdType" in validator.mapped_manifest[filename]:
+                object_id_type = validator.mapped_manifest[filename]["objectIdType"]
+                object_id_type = object_id_type.upper()
+                del user_defined_data["objectIdType"]
+
+            ra = None
+            if "coord_ra" in validator.mapped_manifest[filename]:
+                ra = validator.mapped_manifest[filename]["coord_ra"]
+                del user_defined_data["coord_ra"]
+
+            dec = None
+            if "coord_dec" in validator.mapped_manifest[filename]:
+                dec = validator.mapped_manifest[filename]["coord_dec"]
+                del user_defined_data["coord_dec"]
+                
             del user_defined_data["filename"]
             del user_defined_data["external_id"]
-            del user_defined_data["sourceId"]
-            record.set_fields(edc_ver_id=edc_ver_id, source_id=source_id, source_id_type="objectId", user_defined_values=str(user_defined_data))
+
+            # The only valid values for objectIdType are DIRECT and INDIRECT, so set all
+            # values to INDIRECT if the come in the request as neither
+            if object_id_type is not None and object_id_type.upper() not in VALID_OBJECT_ID_TYPES and logged_obj_type_msg == False:
+                object_id_type = "INDIRECT"
+                response.messages.append("You sent a manifest file with at least one objectIdType value that was neither 'DIRECT' or 'INDIRECT' (the only values allowed for object ID type). The value was automatically replaced with a value of 'INDIRECT'.")
+                logged_obj_type_msg = True
+
+            record.set_fields(edc_ver_id=edc_ver_id, object_id=object_id, object_id_type=object_id_type, user_defined_values=str(user_defined_data), ra=ra, dec=dec)
         except Exception as e:
+            logger.log_text(e.__str__())
             logger.log_text(f"SKIPPING: {filename} in update_meta_records_with_user_values()") 
     return meta_records
 
@@ -859,33 +890,6 @@ def create_edc_logger_record():
     db.close()
     logger.log_text("committed edc-logger record!")
     return
-
-# To-do: Add vendor_batch_id to workflow of this function/route
-# @app.route("/citizen-science-butler-ingest")
-def butler_retrieve_data_and_upload():
-    global db
-    db = init_connection_engine()
-    email = request.args.get('email')
-    collection = request.args.get('collection')
-    source_id = request.args.get("sourceId")
-    vendor_project_id = request.args.get("vendorProjectId")
-    # output = subprocess.run(['sh', '/opt/lsst/software/server/run.sh', email, collection], stdout=subprocess.PIPE).stdout.decode('utf-8')
-
-    # Create a Cloud Storage client.
-    gcs = storage.Client()
-
-    # Get the bucket that the file will be uploaded to.
-    bucket = gcs.bucket(CLOUD_STORAGE_BUCKET)
-
-    filepath = locate('*.fits', "/tmp/data/" + collection)
-    # # Create a new blob and upload the file's content.
-    blob = bucket.blob(filepath[1])
-
-    blob.upload_from_filename(str(filepath[0]))
-
-    manifest_url = build_and_upload_manifest(['https://storage.googleapis.com/butler-config/astrocat.jpeg'], CLOUD_STORAGE_BUCKET)
-
-    return manifest_url
         
 def create_new_batch(project_id, vendor_batch_id):
     global validator, response, debug
@@ -1161,20 +1165,20 @@ def lookup_owner_record(emailP):
    
     return ownerId
 
-def lookup_meta_record(sourceId, sourceIdType, meta_id = None):
+def lookup_meta_record(objectId, objectIdType, meta_id = None):
     meta_records = []
     metaId = None
     try:
         if meta_id == None:
             db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-            stmt = select(CitizenScienceMeta).where(CitizenScienceMeta.source_id == sourceId).where(CitizenScienceMeta.source_id_type == sourceIdType)
+            stmt = select(CitizenScienceMeta).where(CitizenScienceMeta.object_id == objectId).where(CitizenScienceMeta.object_id_type == objectIdType)
             results = db.execute(stmt)
             for row in results.scalars():
                 metaId = row.cit_sci_meta_id
  
             db.close()
 
-            logger.log_text("about to log metaId (queried via sourceId/sourceIdType) in lookup_meta_record()")
+            logger.log_text("about to log metaId (queried via objectId/objectIdType) in lookup_meta_record()")
             logger.log_text(str(metaId))
         else:
             db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
@@ -1183,8 +1187,8 @@ def lookup_meta_record(sourceId, sourceIdType, meta_id = None):
             for row in results.scalars():
                 meta_records.append({
                     "edc_ver_id": row.edc_ver_id,
-                    "source_id": row.source_id,
-                    "source_id_type": row.source_id_type,
+                    "object_id": row.object_id,
+                    "object_id_type": row.object_id_type,
                     "cutout_url": row.uri,
                     "date_transferred": str(row.date_created)
                 })

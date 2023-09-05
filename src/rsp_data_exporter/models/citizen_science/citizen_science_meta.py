@@ -1,5 +1,5 @@
 from sqlalchemy.orm import declarative_base, sessionmaker
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, BigInteger
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, BigInteger, Numeric
 from sqlalchemy.sql import func
 import sqlalchemy
 
@@ -17,6 +17,10 @@ class CitizenScienceMeta(Base):
     public = Column(Boolean)
     date_created = Column(DateTime, server_default=func.now())
     user_defined_values = Column(String(500))
+    object_id = Column(BigInteger)
+    object_id_type = Column(String(50))
+    ra = Column(Numeric(30))
+    dec = Column(Numeric(30))
 
     def get_db_connection(db_host, db_port, db_name, db_user, db_pass):
             engine = sqlalchemy.create_engine("postgresql://{}:{}@{}:{}/{}".format(db_user, db_pass, db_host, db_port, db_name))
@@ -33,3 +37,11 @@ class CitizenScienceMeta(Base):
           self.source_id_type = kwargs["source_id_type"]
         if "user_defined_values" in kwargs:
             self.user_defined_values = kwargs["user_defined_values"]
+        if "object_id" in kwargs:
+            self.object_id = kwargs["object_id"]
+        if "object_id_type" in kwargs:
+            self.object_id_type = kwargs["object_id_type"]
+        if "ra" in kwargs:
+            self.ra = kwargs["ra"]
+        if "dec" in kwargs:
+            self.dec = kwargs["dec"]
