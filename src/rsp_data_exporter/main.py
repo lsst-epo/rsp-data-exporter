@@ -277,9 +277,13 @@ def download_image_data_and_process():
                 response.status = "success"
                 response.manifest_url = manifest_url
 
-                audit_records = insert_audit_records(vendor_project_id)
+                audit_records, audit_messages = insert_audit_records(vendor_project_id)
+
                 if len(audit_records) < len(validator.mapped_manifest):
                     response.messages.append("Some audit records were not inserted!")
+
+                if len(audit_messages) > 0:
+                    response.messages = response.messages + audit_messages
     else:
         logger.log_text("validator.error is True!")
         response.status = "error"
@@ -310,7 +314,7 @@ def insert_audit_records(vendor_project_id):
     try:
         return AuditService.insert_audit_records(vendor_project_id, validator)
     except Exception as e:
-        logger.log_text("an exception occurred in fetch_audit_records!")
+        logger.log_text("an exception occurred in insert_audit_records!")
         logger.log_text(e.__str__())
         response = DataExporterResponse()
         response.status = "ERROR"
