@@ -20,6 +20,7 @@ try:
     from .models.citizen_science.citizen_science_owners import CitizenScienceOwners
     from .models.citizen_science.citizen_science_meta import CitizenScienceMeta
     from .models.citizen_science.citizen_science_proj_meta_lookup import CitizenScienceProjMetaLookup
+    from .models.citizen_science.citizen_science_audit import CitizenScienceAudit
     from .models.data_release.data_release_diaobjects import DataReleaseDiaObjects
     from .models.data_release.data_release_objects import DataReleaseObjects
     from .models.data_release.data_release_forcedsources import DataReleaseForcedSources
@@ -33,6 +34,7 @@ except:
         from models.citizen_science.citizen_science_owners import CitizenScienceOwners
         from models.citizen_science.citizen_science_meta import CitizenScienceMeta
         from models.citizen_science.citizen_science_proj_meta_lookup import CitizenScienceProjMetaLookup
+        from models.citizen_science.citizen_science_audit import CitizenScienceAudit
         from models.data_release.data_release_diaobjects import DataReleaseDiaObjects
         from models.data_release.data_release_objects import DataReleaseObjects
         from models.data_release.data_release_forcedsources import DataReleaseForcedSources
@@ -42,14 +44,14 @@ except:
             logger.log_text("An error occurred while attempting to import subpackages!")
             logger.log_text(e.__str__())        
 
-from flask import Flask, request, Response
+from flask import Flask, request
 from google.cloud import storage
 import panoptes_client
 from panoptes_client import Panoptes, Project, SubjectSet
 import sqlalchemy
 from sqlalchemy import select, update
 import numpy as np
-# import lsst.daf.butler as dafButler
+import audit_service as AuditService
 
 app = Flask(__name__)
 response = DataExporterResponse()
@@ -130,34 +132,32 @@ def query_lookup_records(project_id, batch_id):
     return meta_ids
 
 # @app.route("/citizen-science-butler-test")
-def new_butler_test():
-    # email = "erosas@lsst.org" # Add your primary email
-    logger.log_text("got into /citizen-science-butler-test!")
-    datasetId = "u/erosas@lsst.org/zooniverse-test" # Replace "change-this" with a unique name of your change, leave the leading slash '/'
-    repo = 's3://butler-config' # Keep track of this URI for later use with: butler retrieve-artifacts...
-    collection = "2.2i/runs/DP0.1"
-    logger.log_text("about to set up the butler")
-    butler = dafButler.Butler(repo, collections=collection, run=datasetId)
-    logger.log_text("about to log butler object:")
-    logger.log_text(str(butler.__dict__))
-    registry = butler.registry
-    logger.log_text("about to log registry object:")
-    logger.log_text(str(registry.__dict__))
-    logger.log_text("about to queryDatasets()")
-    refs = registry.queryDatasets(datasetType="calexp", collections=collection)
-    logger.log_text("about to loop through refs and call retrieveArtifacts for only the first ref")
-    transferred = butler.retrieveArtifacts(refs, destination='gs://butler-config/data/')
+# def new_butler_test():
+#     datasetId = "u/erosas@lsst.org/zooniverse-test" # Replace "change-this" with a unique name of your change, leave the leading slash '/'
+#     repo = 's3://butler-config' # Keep track of this URI for later use with: butler retrieve-artifacts...
+#     collection = "2.2i/runs/DP0.1"
+#     logger.log_text("about to set up the butler")
+#     butler = dafButler.Butler(repo, collections=collection, run=datasetId)
+#     logger.log_text("about to log butler object:")
+#     logger.log_text(str(butler.__dict__))
+#     registry = butler.registry
+#     logger.log_text("about to log registry object:")
+#     logger.log_text(str(registry.__dict__))
+#     logger.log_text("about to queryDatasets()")
+#     refs = registry.queryDatasets(datasetType="calexp", collections=collection)
+#     logger.log_text("about to loop through refs and call retrieveArtifacts for only the first ref")
+#     transferred = butler.retrieveArtifacts(refs, destination='gs://butler-config/data/')
 
-    # for i, ref in enumerate(refs):
-    #     logger.log_text("processing...:")
-    #     logger.log_text(str(ref))
-    #     transferred = butler.retrieveArtifacts(ref, destination='gs://butler-config/data/')
-    #     break
+#     # for i, ref in enumerate(refs):
+#     #     logger.log_text("processing...:")
+#     #     logger.log_text(str(ref))
+#     #     transferred = butler.retrieveArtifacts(ref, destination='gs://butler-config/data/')
+#     #     break
     
-    logger.log_text("done retrieving artifacts!")
-    logger.log_text("about to log transferred object")
-    logger.log_text(str(transferred.__dict))
-    return json.dumps(transferred)
+#     logger.log_text("done retrieving artifacts!")
+#     logger.log_text("about to log transferred object")
+#     logger.log_text(str(transferred.__dict))
+#     return json.dumps(transferred)
 
 @app.route("/citizen-science-ingest-status")
 def check_status_of_previously_executed_ingest():
@@ -276,15 +276,50 @@ def download_image_data_and_process():
                 logger.log_text("lookup_status: " + str(lookup_status))
                 response.status = "success"
                 response.manifest_url = manifest_url
+
+                audit_records, audit_messages = insert_audit_records(vendor_project_id)
+
+                if len(audit_records) < len(validator.mapped_manifest):
+                    response.messages.append("Some audit records were not inserted!")
+
+                if len(audit_messages) > 0:
+                    response.messages = response.messages + audit_messages
     else:
         logger.log_text("validator.error is True!")
         response.status = "error"
         if response.messages == None or len(response.messages) == 0:
             response.messages.append("An error occurred while processing the data batch, please try again later.")
+    
 
     res = json.dumps(response.__dict__)
     time_mark(debug, "Done processing, return response to notebook aspect")
     return res
+
+@app.route("/citizen-science-audit-report")
+def fetch_audit_records():
+    vendor_project_id = request.args.get("vendor_project_id")
+    try:
+        return AuditService.fetch_audit_records(vendor_project_id)
+    except Exception as e:
+        logger.log_text("an exception occurred in fetch_audit_records!")
+        logger.log_text(e.__str__())
+        response = DataExporterResponse()
+        response.status = "ERROR"
+        response.messages.append("An error occurred while looking up the audit records associated with Zooniverse project ID: " + vendor_project_id)
+        return json.dumps(response.__dict__)
+
+def insert_audit_records(vendor_project_id):
+    global validator
+    vendor_project_id = request.args.get("vendor_project_id")
+    try:
+        return AuditService.insert_audit_records(vendor_project_id, validator)
+    except Exception as e:
+        logger.log_text("an exception occurred in insert_audit_records!")
+        logger.log_text(e.__str__())
+        response = DataExporterResponse()
+        response.status = "ERROR"
+        response.messages.append("An error occurred while looking up the audit records associated with Zooniverse project ID: " + vendor_project_id)
+        return json.dumps(response.__dict__)
 
 def update_batch_record_with_manifest_url(manifest_url_p):
     global validator
@@ -314,10 +349,6 @@ def create_tabular_meta_records(tabular_records):
     logger.log_text("logging column_names after pop:")
     logger.log_text(str(column_names))
 
-    # column_names = column_names.split(",")
-    # logger.log_text("logging column_names after split:")
-    # logger.log_text(str(column_names))
-
     # Source ID will be extracted directly
     obj_id_idx = column_names.index("objectId")
     column_names.pop(obj_id_idx)
@@ -326,7 +357,6 @@ def create_tabular_meta_records(tabular_records):
         metadata = {}
 
         # Extract the canonical fields so that all that is left are the user-defined values which can be joined
-        # row_arr = row.split(",")
         source_id = row.pop(obj_id_idx)
         for c_idx, col in enumerate(row):
             metadata[column_names[c_idx]] = col
@@ -358,7 +388,6 @@ def update_meta_records_with_user_values(meta_records):
             object_id = None
             if "objectId" in validator.mapped_manifest[filename]:
                 object_id = validator.mapped_manifest[filename]["objectId"]
-                del user_defined_data["objectId"]
 
             object_id_type = None
             if "objectIdType" in validator.mapped_manifest[filename]:
@@ -1127,6 +1156,7 @@ def create_new_owner_record(email):
         db.add(citizen_science_owner_record)
         db.commit()
         owner_id = citizen_science_owner_record.cit_sci_owner_id
+        validator.owner_id = owner_id
     except Exception as e:
         validator.error = True
         response.status = "error"
@@ -1148,6 +1178,7 @@ def lookup_owner_record(emailP):
         results = db.execute(stmt)
         for row in results.scalars():
             ownerId = row.cit_sci_owner_id
+            validator.owner_id = ownerId
             status = row.status
             break
 
