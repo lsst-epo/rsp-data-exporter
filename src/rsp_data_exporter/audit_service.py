@@ -75,6 +75,8 @@ def audit_object_ids(object_ids, vendor_project_id):
         db = CitizenScienceAudit.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
         stmt = select([CitizenScienceAudit.vendor_project_id, func.count(CitizenScienceAudit.object_id)]).where(CitizenScienceAudit.object_id.in_(object_ids)).group_by(CitizenScienceAudit.vendor_project_id).filter(CitizenScienceAudit.vendor_project_id != int(vendor_project_id))
         results = db.execute(stmt).fetchall() 
+        logger.log_text("done querying for object ID matches!")
+        logger.log_text(str(results))
     except Exception as e:
         logger.log_text("an exception occurred in audit_object_ids")
         logger.log_text(e.__str__())
@@ -82,29 +84,46 @@ def audit_object_ids(object_ids, vendor_project_id):
 
     audit_aggr = []
     for row in results:
+        logger.log_text("looping through results!")
         audit_aggr.append([row[0], row[1]])
-
+    
+    logger.log_text("about to close DB!")
     db.close()
+
+    logger.log_text("about to log audit_aggr:")
+    logger.log_text(str(audit_aggr))
 
     audit_response = []
     for row in audit_aggr:
-        vendor_project_name = get_vendor_project_name(row[0])
+        vendor_project_name, vendor_project_start_date, workflow_info = get_vendor_project_details(row[0])
+        logger.log_text("about to check if vendor_project_name is not None")
         if vendor_project_name is not None:
+            logger.log_text("vendor project ID is NOT none!")
             perc_match = float(row[1]) / len(object_ids)
-            audit_response.append("The dataset you curated has a " + str(perc_match) + " object ID match on another Zooniverse project: " + vendor_project_name)
-
+            audit_response.append("The dataset you curated has a " + str(perc_match) + " object ID match on another Zooniverse project: " + vendor_project_name + ", which was started on " + vendor_project_start_date + ". " + workflow_info)
+        else:
+            logger.log_text("vendor project name IS none!")
     return audit_response
 
-def get_vendor_project_name(vendor_project_id):
+def get_vendor_project_details(vendor_project_id):
     logger.log_text("about to lookup project name in get_vendor_project_name")
     try:
         project = Project.find(id=vendor_project_id)
         project_name = project.raw["display_name"]
-        return project_name
+        project_start_date = project.created_at[:10]
+
+        workflow_info = []
+        for workflow, idx in enumerate(project.links.workflows):
+            workflow_info.append("Workflow #" + str(idx+1) + " : " + str(workflow.subjects_count) + " subjects; " + str(workflow.completeness) + " complete. ")
+
+        workflow_output = "No workflows associated with this project."
+        if len(workflow_info) > 0:
+            workflow_output = "".join(workflow_info)
+        return project_name, project_start_date, workflow_output
     except Exception as e:
         if "Could not find project with id" in e.__str__():
-            return "(Deleted Zooniverse project)"
+            return "(Deleted Zooniverse project)", "Unknown start date", "Unknown workflow information"
         else:
             logger.log_text("an exception occurred in get_vendor_project_name")
             logger.log_text(e.__str__())
-            return None
+            return None, "Unknown start date", "Unknown workflow information"
