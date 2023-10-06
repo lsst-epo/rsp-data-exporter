@@ -8,3 +8,4 @@ test.csv
 env/
 .vscode/
 key.json
+.coverage

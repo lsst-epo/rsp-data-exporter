@@ -886,7 +886,7 @@ def validate_project_metadata(email, vendor_project_id, vendor_batch_id = None):
 
     # Then, check batch status
     if validator.error == False:
-        batch_ids = check_batch_status(project_id, vendor_project_id) # To-do: Look into whether or not this would be a good time to check with Zoony on the status of the batches
+        batch_ids = check_batch_status(project_id, vendor_project_id) 
 
         if len(batch_ids) == 0:
             # Create new batch record
@@ -903,7 +903,7 @@ def validate_project_metadata(email, vendor_project_id, vendor_batch_id = None):
                 logger.log_text("calling! create_edc_logger_record()")
                 create_edc_logger_record()
             validator.error = True
-            response.messages.append("You currently have an active batch of data on the Zooniverse platform and cannot create a new batch until the current batch has been completed.")
+            response.messages.append("You currently have an active subject set (not yet retired) on the Zooniverse platform and cannot send a new subject set until the current subject set has been assigned to a workflow and completed.")
             return False
     else:
         return False
