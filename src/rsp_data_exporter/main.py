@@ -951,8 +951,8 @@ def check_batch_status(project_id, vendor_project_id):
     global validator, debug
     time_mark(debug, "Start of check batch status!!!")
     logger.log_text("inside of check_batch_status, logging project_id : " + str(project_id))
-    # batches_still_active = []
-    # batches_not_found_in_zooniverse = []
+    batches_still_active = []
+    batches_not_found_in_zooniverse = []
     batches_in_db = []
 
     try:
@@ -963,116 +963,123 @@ def check_batch_status(project_id, vendor_project_id):
         # batch_record = None
         
         for row in results.scalars():
-            if validator.data_rights_approved == False:
-                validator.error = True
-                response.status = "error"
-                response.messages.append("Your project has not yet been approved by the data rights panel. You can curate no more than one subject set before your project is approved.")
-                db.close()
-                return
+            # if validator.data_rights_approved == False:
+                # validator.error = True
+                # response.status = "error"
+                # response.messages.append("Your project has not yet been approved by the data rights panel. You can curate no more than one subject set before your project is approved.")
+                # db.close()
+                # return
             batches_in_db.append({
                 "batch_record" : row,
                 "batch_id" : row.cit_sci_batch_id,
                 "vendor_batch_id_db" : row.vendor_batch_id
             })
 
-        # Per EPO-8572 multiple subject sets will now be allowed
+        db.commit()
 
-        # db.commit()
+        logger.log_text("about to evaluate batch_id after checking the DB")
+        if len(batches_in_db) > 0 and TEST_ONLY == False:
+            logger.log_text("# of active batches found in DB: " + str(len(batches_in_db)))
+            # Call the Zooniverse API to get all subject sets for the project
+            project = Project.find(int(vendor_project_id))
 
-        # logger.log_text("about to evaluate batch_id after checking the DB")
-        # if len(batches_in_db) > 0 and TEST_ONLY == False:
-        #     logger.log_text("# of active batches found in DB: " + str(len(batches_in_db)))
-        #     # Call the Zooniverse API to get all subject sets for the project
-        #     project = Project.find(int(vendor_project_id))
+            logger.log_text("about to log project:")
+            logger.log_text(str(project.raw))
 
-        #     logger.log_text("about to log project:")
-        #     logger.log_text(str(project.raw))
-
-        #     subject_set_list = list(project.links.subject_sets)
+            subject_set_list = list(project.links.subject_sets)
             
-        #     for batch_in_db in batches_in_db:
-        #         update_batch_record = False
-        #         logger.log_text("about to process batch_id")
-        #         logger.log_text(str(batch_in_db["batch_id"]))
-        #         logger.log_text("about to process vendor_batch_id_db")
-        #         logger.log_text(str(batch_in_db["vendor_batch_id_db"]))
+            for batch_in_db in batches_in_db:
+                update_batch_record = False
+                logger.log_text("about to process batch_id")
+                logger.log_text(str(batch_in_db["batch_id"]))
+                logger.log_text("about to process vendor_batch_id_db")
+                logger.log_text(str(batch_in_db["vendor_batch_id_db"]))
 
-        #         if len(subject_set_list) == 0:
-        #             logger.log_text("the length of project.links.subject_sets is 0!")
-        #             update_batch_record = True
-        #         else:
-        #             logger.log_text("the length of project.links.subject_sets is > 0! : " + str(len(list(project.links.subject_sets))))
-        #             found_subject_set = False
-        #             for sub in subject_set_list:
-        #                 try:
-        #                     logger.log_text("looping through project.links.subject_sets")
-        #                     if str(batch_in_db["vendor_batch_id_db"]) == sub.id:
-        #                         logger.log_text("Found the subject set in question!")
-        #                         found_subject_set = True
-        #                         # Zooniverse has a weird way of tracking subject sets, subject sets that have not been
-        #                         # added to a workflow have a completeness of: {}
-        #                         if len(sub.completeness) == 0:
-        #                             logger.log_text("The subject set hasn't been assigned to a workflow/hasn't been worked on!!!")
-        #                             update_batch_record = False
-        #                             batches_still_active.append(sub.id)
-        #                             break
-        #                         else:
-        #                             # The subject set HAS been started, worked on, so evaluate if it is complete
-        #                             for completeness_key in sub.completeness:
-        #                                 if sub.completeness[completeness_key] == 1.0:
-        #                                     logger.log_text("subject set IS COMPLETE!!")
-        #                                     update_batch_record = True
-        #                                     break
-        #                                 else:
-        #                                     # Found the batch, but it's not complete, check if it contains subjects or not
-        #                                     try:
-        #                                         logger.log_text("subject set is NOT complete!!")
-        #                                         first = next(subject_set_list[0].subjects)
-        #                                         if first is not None:
-        #                                             # Active batch with subjects, return
-        #                                             logger.log_text("first is NOT None!!!")
-        #                                             batches_still_active.append(sub.id)
-        #                                             update_batch_record = False
-        #                                             break
-        #                                         else:
-        #                                             logger.log_text("Erroneous caching of Zooniverse client, updating EDC database");
-        #                                             update_batch_record = True
-        #                                             break
-        #                                     except StopIteration:
-        #                                         logger.log_text("setting validator.error to True!")
-        #                                         validator.log_to_edc = True
-        #                                         validator.edc_logger_category = "BATCH_LOOKUP"
-        #                                         logger_notes = {
-        #                                             "project_id" : project_id,
-        #                                             "batch_id" : batch_in_db["batch_id"],
-        #                                             "vendor_project_id" : vendor_project_id,
-        #                                             "vendor_batch_id" : batch_in_db["vendor_batch_id_db"]
-        #                                         }
-        #                                         validator.edc_logger_notes = json.dumps(logger_notes)
-        #                                         response.status = "error"
-        #                                         response.messages.append("You have an active, but empty subject set on the zooniverse platform with an ID of " + str(batch_in_db["vendor_batch_id_db"]) + ". Please delete this subject set on the Zoonivese platform and try again.")
-        #                                         continue
-        #                 except Exception as e:
-        #                     logger.log_text("An error occurred while looping through the subject sets, this usually occurs because of stale data that has been cached by Zooniverse. ")
-        #                     validator.log_to_edc = True
-        #                     validator.edc_logger_category = "BATCH_LOOKUP"
-        #                     validator.edc_logger_notes = str(e)
-        #                     response.status = "error"
-        #                     continue
+                if len(subject_set_list) == 0:
+                    logger.log_text("the length of project.links.subject_sets is 0!")
+                    update_batch_record = True
+                else:
+                    logger.log_text("the length of project.links.subject_sets is > 0! : " + str(len(list(project.links.subject_sets))))
 
-        #             if found_subject_set == False:
-        #                 logger.log_text("The subject set in question was NEVER found!")
-        #                 batches_not_found_in_zooniverse.append(str(batch_in_db["vendor_batch_id_db"]))
-        #                 update_batch_record = True
+                    # Evaluate data rights
+                    if validator.data_rights_approved == False:
+                        validator.error = True
+                        response.status = "error"
+                        response.messages.append("Your project has not yet been approved by the data rights panel. You can curate no more than one subject set before your project is approved. If you have an existing subject set that you have already sent to your Zooniverse project and you need to correct the data before you present your project to the data rights panel then delete the subject set on the Zooniverse platform and try again.")
+                        db.close()
+                        return
+                    
+                    found_subject_set = False
+                    for sub in subject_set_list:
+                        try:
+                            logger.log_text("looping through project.links.subject_sets")
+                            if str(batch_in_db["vendor_batch_id_db"]) == sub.id:
+                                logger.log_text("Found the subject set in question!")
+                                found_subject_set = True
+                                # Zooniverse has a weird way of tracking subject sets, subject sets that have not been
+                                # added to a workflow have a completeness of: {}
+                                if len(sub.completeness) == 0:
+                                    logger.log_text("The subject set hasn't been assigned to a workflow/hasn't been worked on!!!")
+                                    update_batch_record = False
+                                    batches_still_active.append(sub.id)
+                                    break
+                                else:
+                                    # The subject set HAS been started, worked on, so evaluate if it is complete
+                                    for completeness_key in sub.completeness:
+                                        if sub.completeness[completeness_key] == 1.0:
+                                            logger.log_text("subject set IS COMPLETE!!")
+                                            update_batch_record = True
+                                            break
+                                        else:
+                                            # Found the batch, but it's not complete, check if it contains subjects or not
+                                            try:
+                                                logger.log_text("subject set is NOT complete!!")
+                                                first = next(subject_set_list[0].subjects)
+                                                if first is not None:
+                                                    # Active batch with subjects, return
+                                                    logger.log_text("first is NOT None!!!")
+                                                    batches_still_active.append(sub.id)
+                                                    update_batch_record = False
+                                                    break
+                                                else:
+                                                    logger.log_text("Erroneous caching of Zooniverse client, updating EDC database");
+                                                    update_batch_record = True
+                                                    break
+                                            except StopIteration:
+                                                logger.log_text("setting validator.error to True!")
+                                                validator.log_to_edc = True
+                                                validator.edc_logger_category = "BATCH_LOOKUP"
+                                                logger_notes = {
+                                                    "project_id" : project_id,
+                                                    "batch_id" : batch_in_db["batch_id"],
+                                                    "vendor_project_id" : vendor_project_id,
+                                                    "vendor_batch_id" : batch_in_db["vendor_batch_id_db"]
+                                                }
+                                                validator.edc_logger_notes = json.dumps(logger_notes)
+                                                response.status = "error"
+                                                response.messages.append("You have an active, but empty subject set on the zooniverse platform with an ID of " + str(batch_in_db["vendor_batch_id_db"]) + ". Please delete this subject set on the Zoonivese platform and try again.")
+                                                continue
+                        except Exception as e:
+                            logger.log_text("An error occurred while looping through the subject sets, this usually occurs because of stale data that has been cached by Zooniverse. ")
+                            validator.log_to_edc = True
+                            validator.edc_logger_category = "BATCH_LOOKUP"
+                            validator.edc_logger_notes = str(e)
+                            response.status = "error"
+                            continue
 
-        #         if update_batch_record == True:
-        #             logger.log_text("about to update EDC batch ID " + str(batch_in_db["batch_id"]) + ", vendor batch ID: " + str(batch_in_db["vendor_batch_id_db"]) + " in the DB!")
-        #             batch_in_db["batch_record"].batch_status = "COMPLETE"
-        #             db.commit()
-        # elif TEST_ONLY == True:
-        #     for batch in batches_in_db:
-        #         batches_still_active.append({
-        #             "batch_record" : batch})
+                    if found_subject_set == False:
+                        logger.log_text("The subject set in question was NEVER found!")
+                        batches_not_found_in_zooniverse.append(str(batch_in_db["vendor_batch_id_db"]))
+                        update_batch_record = True
+
+                if update_batch_record == True:
+                    logger.log_text("about to update EDC batch ID " + str(batch_in_db["batch_id"]) + ", vendor batch ID: " + str(batch_in_db["vendor_batch_id_db"]) + " in the DB!")
+                    batch_in_db["batch_record"].batch_status = "COMPLETE"
+                    db.commit()
+        elif TEST_ONLY == True:
+            for batch in batches_in_db:
+                batches_still_active.append({
+                    "batch_record" : batch})
 
     except Exception as e:
         logger.log_text("about to log exception in check_batch_status!")

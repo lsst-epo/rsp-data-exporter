@@ -95,11 +95,14 @@ def audit_object_ids(object_ids, vendor_project_id):
 
     audit_response = []
     for row in audit_aggr:
-        vendor_project_name, vendor_project_start_date, workflow_info = get_vendor_project_details(row[0])
+        vendor_project_name, vendor_project_start_date, workflow_info, subjects_count = get_vendor_project_details(row[0])
         logger.log_text("about to check if vendor_project_name is not None")
         if vendor_project_name is not None:
             logger.log_text("vendor project ID is NOT none!")
-            perc_match = float(row[1]) / len(object_ids)
+            max_obj_id_count = len(object_ids)
+            if subjects_count > len(object_ids):
+                max_obj_id_count = subjects_count
+            perc_match = float(row[1]) / max_obj_id_count
             audit_response.append("The dataset you curated has a " + str(perc_match) + " object ID match on another Zooniverse project: " + vendor_project_name + ", which was started on " + vendor_project_start_date + ". " + workflow_info)
         else:
             logger.log_text("vendor project name IS none!")
@@ -111,6 +114,7 @@ def get_vendor_project_details(vendor_project_id):
         project = Project.find(id=vendor_project_id)
         project_name = project.raw["display_name"]
         project_start_date = project.created_at[:10]
+        project_subjects_count = project.subjects_count
 
         workflow_info = []
         for workflow, idx in enumerate(project.links.workflows):
@@ -119,11 +123,11 @@ def get_vendor_project_details(vendor_project_id):
         workflow_output = "No workflows associated with this project."
         if len(workflow_info) > 0:
             workflow_output = "".join(workflow_info)
-        return project_name, project_start_date, workflow_output
+        return project_name, project_start_date, workflow_output, project_subjects_count
     except Exception as e:
         if "Could not find project with id" in e.__str__():
-            return "(Deleted Zooniverse project)", "Unknown start date", "Unknown workflow information"
+            return "(Deleted Zooniverse project)", "Unknown start date", "Unknown workflow information", 0
         else:
             logger.log_text("an exception occurred in get_vendor_project_name")
             logger.log_text(e.__str__())
-            return None, "Unknown start date", "Unknown workflow information"
+            return None, "Unknown start date", "Unknown workflow information", 0
