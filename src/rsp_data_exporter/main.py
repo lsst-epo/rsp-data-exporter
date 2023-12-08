@@ -51,8 +51,8 @@ from panoptes_client import Panoptes, Project, SubjectSet
 import sqlalchemy
 from sqlalchemy import select, update
 import numpy as np
-import rsp_data_exporter.services.audit_report as AuditReportService
-import rsp_data_exporter.services.manifest_file as ManifestFileService
+import services.audit_report as AuditReportService
+import services.manifest_file as ManifestFileService
 
 app = Flask(__name__)
 response = DataExporterResponse()
