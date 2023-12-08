@@ -9,7 +9,7 @@ log_name = "rsp-data-exporter.audit_service"
 logger = logging_client.logger(log_name)
 
 try:
-    from .models.citizen_science.citizen_science_audit import CitizenScienceAudit
+    from ..models.citizen_science.citizen_science_audit import CitizenScienceAudit
 except:
     try:
         from models.citizen_science.citizen_science_audit import CitizenScienceAudit
