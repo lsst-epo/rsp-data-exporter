@@ -272,7 +272,7 @@ def insert_audit_records(vendor_project_id):
     global validator
     vendor_project_id = request.args.get("vendor_project_id")
     try:
-        return AuditReportService.insert_audit_records(vendor_project_id, validator)
+        return AuditReportService.insert_audit_records(vendor_project_id, validator.mapped_manifest, validator.owner_id)
     except Exception as e:
         logger.log_text("an exception occurred in insert_audit_records!")
         logger.log_text(e.__str__())
@@ -949,6 +949,7 @@ def lookup_project_record(vendorProjectId):
         for row in results.scalars():
             logger.log_text("in a result in the loop!")
             status = row.project_status
+            
             validator.data_rights_approved = row.data_rights_approved
 
             logger.log_text("about to check project status")

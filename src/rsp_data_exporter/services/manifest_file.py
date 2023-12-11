@@ -51,7 +51,7 @@ def update_batch_record_with_manifest_url(manifest_url_p, batch_id):
         db.close()
         logger.log_text("done updating the batch record with the manifest URL")
     except Exception as e:
-        logger.log_text("An exception occurred while attempting to update the batch record with the manifest URL!")
+        logger.log_text("An` exception occurred while attempting to update the batch record with the manifest URL!")
         logger.log_text(e.__str__())
     return
 
@@ -182,7 +182,7 @@ def build_and_upload_manifest(urls, bucket, batch_id, guid = ""):
                 
                 if has_flipbook_columns == True:
                     for col in column_names:
-                        if "image_" in col:
+                        if "location:image_" in col:
                             csv_row[col] = '/'.join(url_list) + "/" + csv_row[col]
                     del csv_row["filename"]
                 else:
