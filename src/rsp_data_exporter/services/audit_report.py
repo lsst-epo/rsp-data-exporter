@@ -9,7 +9,7 @@ log_name = "rsp-data-exporter.audit_service"
 logger = logging_client.logger(log_name)
 
 try:
-    from .models.citizen_science.citizen_science_audit import CitizenScienceAudit
+    from ..models.citizen_science.citizen_science_audit import CitizenScienceAudit
 except:
     try:
         from models.citizen_science.citizen_science_audit import CitizenScienceAudit
@@ -38,15 +38,17 @@ def fetch_audit_records(vendor_project_id):
         
     return str(audit_response)
 
-def insert_audit_records(vendor_project_id, validator):
+def insert_audit_records(vendor_project_id, mapped_manifest, owner_id):
+    logger.log_text("About to log the mapped manifest for the variable stars notebook!!")
+    logger.log_text(str(mapped_manifest))
     audit_records = []
     object_ids = []
-    for key in validator.mapped_manifest:
-        if "objectId" in validator.mapped_manifest[key]:
+    for key in mapped_manifest:
+        if "objectId" in mapped_manifest[key]:
 
-            object_id = validator.mapped_manifest[key]["objectId"]
+            object_id = mapped_manifest[key]["objectId"]
             object_ids.append(object_id)
-            audit_records.append(CitizenScienceAudit(object_id=object_id, cit_sci_owner_id=validator.owner_id, vendor_project_id=vendor_project_id))
+            audit_records.append(CitizenScienceAudit(object_id=object_id, cit_sci_owner_id=owner_id, vendor_project_id=vendor_project_id))
 
         if len(audit_records) > 0:
             try:
@@ -109,7 +111,7 @@ def audit_object_ids(object_ids, vendor_project_id):
     return audit_response
 
 def get_vendor_project_details(vendor_project_id):
-    logger.log_text("about to lookup project name in get_vendor_project_name")
+    logger.log_text("about to lookup project name in get_vendor_project_details")
     try:
         project = Project.find(id=vendor_project_id)
         project_name = project.raw["display_name"]
@@ -117,8 +119,9 @@ def get_vendor_project_details(vendor_project_id):
         project_subjects_count = project.subjects_count
 
         workflow_info = []
-        for workflow, idx in enumerate(project.links.workflows):
-            workflow_info.append("Workflow #" + str(idx+1) + " : " + str(workflow.subjects_count) + " subjects; " + str(workflow.completeness) + " complete. ")
+        for idx, workflow in enumerate(project.links.workflows):
+            workflow_num = idx + 1
+            workflow_info.append("Workflow #" + str(workflow_num) + " : " + str(workflow.subjects_count) + " subjects; " + str(workflow.completeness) + " complete. ")
 
         workflow_output = "No workflows associated with this project."
         if len(workflow_info) > 0:
@@ -128,6 +131,6 @@ def get_vendor_project_details(vendor_project_id):
         if "Could not find project with id" in e.__str__():
             return "(Deleted Zooniverse project)", "Unknown start date", "Unknown workflow information", 0
         else:
-            logger.log_text("an exception occurred in get_vendor_project_name")
+            logger.log_text("an exception occurred in get_vendor_project_details")
             logger.log_text(e.__str__())
             return None, "Unknown start date", "Unknown workflow information", 0
