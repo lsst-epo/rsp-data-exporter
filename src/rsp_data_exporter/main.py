@@ -49,10 +49,11 @@ from google.cloud import storage
 import panoptes_client
 from panoptes_client import Panoptes, Project, SubjectSet
 import sqlalchemy
-from sqlalchemy import select, update
+from sqlalchemy import select
 import numpy as np
 import services.audit_report as AuditReportService
 import services.manifest_file as ManifestFileService
+import services.owner as OwnerService
 
 app = Flask(__name__)
 response = DataExporterResponse()
@@ -68,7 +69,6 @@ DB_HOST = os.environ['DB_HOST']
 DB_PORT = os.environ['DB_PORT']
 db = None
 CLOSED_PROJECT_STATUSES = ["COMPLETE", "CANCELLED", "ABANDONED"]
-BAD_OWNER_STATUSES = ["BLOCKED", "DISABLED"]
 debug = False
 
 def check_test_only_var():
@@ -713,8 +713,6 @@ def validate_project_metadata(email, vendor_project_id, vendor_batch_id = None):
             if validator.log_to_edc:
                 logger.log_text("calling! create_edc_logger_record()")
                 create_edc_logger_record()
-            # validator.error = True
-            # response.messages.append("You currently have an active subject set (not yet retired) on the Zooniverse platform and cannot send a new subject set until the current subject set has been assigned to a workflow and completed.")
             return False
     else:
         return False
@@ -975,54 +973,22 @@ def lookup_project_record(vendorProjectId):
 def create_new_owner_record(email):
     global validator, response, debug
     time_mark(debug, "Start of create new owner")
-
-    owner_id = None;
-    try:
-        logger.log_text("about to insert new owner record")
-        db = CitizenScienceOwners.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-        citizen_science_owner_record = CitizenScienceOwners(email=email, status='ACTIVE')
-        db.add(citizen_science_owner_record)
-        db.commit()
-        owner_id = citizen_science_owner_record.cit_sci_owner_id
-        validator.owner_id = owner_id
-    except Exception as e:
+    owner_id, messages = OwnerService.create_new_owner_record(email)
+    if len(messages) > 0:
         validator.error = True
         response.status = "error"
-        logger.log_text(e.__str__())
-        response.messages.append("An error occurred while attempting to create a new project owner record for you - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
-
+        response.messages.append(messages)
     return owner_id
 
-def lookup_owner_record(emailP):
+def lookup_owner_record(email):
     global validator, response, debug
     time_mark(debug, "Looking up owner record")
-    ownerId = None
-    status = ""
-
-    try:
-        db = CitizenScienceOwners.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-        stmt = select(CitizenScienceOwners).where(CitizenScienceOwners.email == emailP)
-
-        results = db.execute(stmt)
-        for row in results.scalars():
-            ownerId = row.cit_sci_owner_id
-            validator.owner_id = ownerId
-            status = row.status
-            break
-
-        if status in BAD_OWNER_STATUSES:
-            validator.error = True
-            response.status = "error"
-            response.messages.append("You are not/no longer eligible to use the Rubin Science Platform to send data to Zooniverse.")
-
-        db.close()
-    except Exception as e:
+    owner_id, messages = OwnerService.lookup_owner_record(email)
+    if len(messages) > 0:
         validator.error = True
         response.status = "error"
-        response.messages.append("An error occurred while looking up your projects owner record - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
-        logger.log_text(e.__str__())
-   
-    return ownerId
+        response.messages.append(messages)
+    return owner_id
 
 def lookup_meta_record(objectId, objectIdType, meta_id = None):
     meta_records = []
