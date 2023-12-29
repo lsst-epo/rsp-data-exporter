@@ -54,6 +54,7 @@ import numpy as np
 import services.audit_report as AuditReportService
 import services.manifest_file as ManifestFileService
 import services.owner as OwnerService
+import services.projects as ProjectService
 
 app = Flask(__name__)
 response = DataExporterResponse()
@@ -68,7 +69,6 @@ DB_NAME = os.environ['DB_NAME']
 DB_HOST = os.environ['DB_HOST']
 DB_PORT = os.environ['DB_PORT']
 db = None
-CLOSED_PROJECT_STATUSES = ["COMPLETE", "CANCELLED", "ABANDONED"]
 debug = False
 
 def check_test_only_var():
@@ -904,70 +904,28 @@ def check_batch_status(project_id, vendor_project_id):
     # logger.log_text(str(batches_not_found_in_zooniverse))
     return batches_in_db
 
-def create_new_project_record(ownerId, vendorProjectId):
+def create_new_project_record(owner_id, vendor_project_id):
     global validator, response, debug
     time_mark(debug, "Start of create new project")
-    project_id = None
-    try:
-        logger.log_text("about to create new project record!")
-        db = CitizenScienceProjects.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-        citizen_science_project_record = CitizenScienceProjects(vendor_project_id=vendorProjectId, owner_id=ownerId, project_status='ACTIVE', excess_data_exception=False, data_rights_approved=False)
-        db.add(citizen_science_project_record)
-        db.commit()
-        project_id = citizen_science_project_record.cit_sci_proj_id
+    project_id, messages = ProjectService.create_new_project_record(owner_id, vendor_project_id)
 
-
-    except Exception as e:
+    if len(messages) > 0:
         validator.error = True
         response.status = "error"
-        response.messages.append("An error occurred while attempting to create a new project owner record for you - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
-        logger.log_text("An exception occurred while creating a new project record")
-        logger.log_text(e.__str__())
-
-    logger.log_text("about to return from create_new_project_record")
+        response.messages.append(messages)
     return project_id
 
-def lookup_project_record(vendorProjectId):
+def lookup_project_record(vendor_project_id):
     global response, validator, debug
     time_mark(debug, "Start of lookup project record")
-    project_id = None
-    status = None
+    project_id, data_rights_approved, messages =  ProjectService.lookup_project_record(vendor_project_id)
 
-    logger.log_text("logging vendorProjectId:")
-    logger.log_text(vendorProjectId)
-
-    try:
-        db = CitizenScienceProjects.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-        stmt = select(CitizenScienceProjects).where(CitizenScienceProjects.vendor_project_id == int(vendorProjectId))
-
-        logger.log_text("about to execute query in lookup_project_record")
-        results = db.execute(stmt)
-
-        logger.log_text("about to loop through results")
-        for row in results.scalars():
-            logger.log_text("in a result in the loop!")
-            status = row.project_status
-            
-            validator.data_rights_approved = row.data_rights_approved
-
-            logger.log_text("about to check project status")
-            if status in CLOSED_PROJECT_STATUSES:
-                logger.log_text("project status in bad status!!!")
-                response.status = "error"
-                validator.error = True
-                response.messages.append("This project is in a status of " + status + " - either create a new project or contact Rubin to request for the project to be reopened.")
-            else:
-                logger.log_text("project status is in a good place")
-                project_id = row.cit_sci_proj_id
-        db.close()
-    except Exception as e:
+    validator.data_rights_approved = data_rights_approved
+    if len(messages) > 0:
         validator.error = True
         response.status = "error"
-        logger.log_text("an exception occurred in lookup_project_record")
-        response.messages.append("An error occurred while attempting to lookup your project record - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
-        logger.log_text(e.__str__())
+        response.messages.append(messages)
 
-    logger.log_text("about to return project_id in lookup_project_record")
     return project_id
 
 def create_new_owner_record(email):
