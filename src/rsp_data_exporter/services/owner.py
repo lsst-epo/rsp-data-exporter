@@ -18,7 +18,7 @@ DB_HOST = os.environ['DB_HOST']
 DB_PORT = os.environ['DB_PORT']
 
 logging_client = logging.Client()
-log_name = "rsp-data-exporter.owners_service"
+log_name = "rsp-data-exporter.owner_service"
 logger = logging_client.logger(log_name)
 
 def create_new_owner_record(email):

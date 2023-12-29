@@ -18,7 +18,7 @@ DB_PORT = os.environ['DB_PORT']
 CLOSED_PROJECT_STATUSES = ["COMPLETE", "CANCELLED", "ABANDONED"]
 
 logging_client = logging.Client()
-log_name = "rsp-data-exporter.projects_service"
+log_name = "rsp-data-exporter.project_service"
 logger = logging_client.logger(log_name)
 
 def lookup_project_record(vendor_project_id):
