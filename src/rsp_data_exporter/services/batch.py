@@ -55,8 +55,6 @@ def create_new_batch(project_id, vendor_batch_id):
         logger.log_text("Exception text: " + e.__str__())
         logger.log_text("Exception text: " + str(e))
         logger.log_text("End of exception logging")
-        # validator.error = True
-        # response.status = "error"
         messages.append("An error occurred while attempting to create a new data batch record for you - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
 
     return batch_id
@@ -114,8 +112,6 @@ def check_batch_status(project_id, vendor_project_id, test_only, data_rights_app
 
                     # Evaluate data rights
                     if data_rights_approved == False:
-                        # validator.error = True
-                        # response.status = "error"
                         messages.append("Your project has not yet been approved by the data rights panel. You can curate no more than one subject set before your project is approved. If you have an existing subject set that you have already sent to your Zooniverse project and you need to correct the data before you present your project to the data rights panel then delete the subject set on the Zooniverse platform and try again.")
                         db.close()
                         return
@@ -158,24 +154,10 @@ def check_batch_status(project_id, vendor_project_id, test_only, data_rights_app
                                                     break
                                             except StopIteration:
                                                 logger.log_text("setting validator.error to True!")
-                                                # validator.log_to_edc = True
-                                                # validator.edc_logger_category = "BATCH_LOOKUP"
-                                                # logger_notes = {
-                                                #     "project_id" : project_id,
-                                                #     "batch_id" : batch_in_db["batch_id"],
-                                                #     "vendor_project_id" : vendor_project_id,
-                                                #     "vendor_batch_id" : batch_in_db["vendor_batch_id_db"]
-                                                # }
-                                                # validator.edc_logger_notes = json.dumps(logger_notes)
-                                                # response.status = "error"
                                                 messages.append("You have an active, but empty subject set on the zooniverse platform with an ID of " + str(batch_in_db["vendor_batch_id_db"]) + ". Please delete this subject set on the Zoonivese platform and try again.")
                                                 continue
                         except Exception as e:
                             logger.log_text("An error occurred while looping through the subject sets, this usually occurs because of stale data that has been cached by Zooniverse. ")
-                            # validator.log_to_edc = True
-                            # validator.edc_logger_category = "BATCH_LOOKUP"
-                            # validator.edc_logger_notes = str(e)
-                            # response.status = "error"
                             continue
 
                     if found_subject_set == False:
@@ -194,9 +176,6 @@ def check_batch_status(project_id, vendor_project_id, test_only, data_rights_app
     except Exception as e:
         logger.log_text("about to log exception in check_batch_status!")
         logger.log_text(e.__str__())
-        # logger.log_text(py_logging.exception("message"))
-        # validator.error = True
-        # response.status = "error"
         messages.append("An error occurred while attempting to lookup your batch records - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
 
     db.close()
