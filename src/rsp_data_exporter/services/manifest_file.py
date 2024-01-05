@@ -12,7 +12,7 @@ except:
         pass
 
 logging_client = logging.Client()
-log_name = "rsp-data-exporter.audit_service"
+log_name = "rsp-data-exporter.manifest_service"
 logger = logging_client.logger(log_name)
 
 VALID_OBJECT_ID_TYPES = ["DIRECT", "INDIRECT"]
@@ -59,49 +59,68 @@ def update_meta_records_with_user_values(meta_records, mapped_manifest):
 
     logger.log_text("mapped_manifest: ")
     logger.log_text(str(mapped_manifest))
+
+    logger.log_text("meta_records: ")
+    logger.log_text(str(meta_records))
+
     info_message = ""
 
     logged_obj_type_msg = False
     for record in meta_records:
         filename = record.uri[record.uri.rfind("/") + 1:]
         try:
-            user_defined_data = mapped_manifest[filename]
-            edc_ver_id = mapped_manifest[filename]["external_id"]
+            logger.log_text("about evalaluate mapped_manifest[filename]")
+            if filename in mapped_manifest:
+                user_defined_data = mapped_manifest[filename]
+                logger.log_text("about get mapped_manifest[filename][external_id]")
+                edc_ver_id = mapped_manifest[filename]["external_id"]
 
-            object_id = None
-            if "objectId" in mapped_manifest[filename]:
-                object_id = mapped_manifest[filename]["objectId"]
+                object_id = None
+                if "objectId" in mapped_manifest[filename]:
+                    object_id = mapped_manifest[filename]["objectId"]
 
-            object_id_type = None
-            if "objectIdType" in mapped_manifest[filename]:
-                object_id_type = mapped_manifest[filename]["objectIdType"]
-                object_id_type = object_id_type.upper()
-                del user_defined_data["objectIdType"]
+                object_id_type = None
+                if "objectIdType" in mapped_manifest[filename]:
+                    object_id_type = mapped_manifest[filename]["objectIdType"]
+                    object_id_type = object_id_type.upper()
+                    del user_defined_data["objectIdType"]
 
-            ra = None
-            if "coord_ra" in mapped_manifest[filename]:
-                ra = mapped_manifest[filename]["coord_ra"]
-                del user_defined_data["coord_ra"]
+                ra = None
+                if "coord_ra" in mapped_manifest[filename]:
+                    ra = mapped_manifest[filename]["coord_ra"]
+                    del user_defined_data["coord_ra"]
 
-            dec = None
-            if "coord_dec" in mapped_manifest[filename]:
-                dec = mapped_manifest[filename]["coord_dec"]
-                del user_defined_data["coord_dec"]
-                
-            del user_defined_data["filename"]
-            del user_defined_data["external_id"]
+                dec = None
+                if "coord_dec" in mapped_manifest[filename]:
+                    dec = mapped_manifest[filename]["coord_dec"]
+                    del user_defined_data["coord_dec"]
+                    
+                logger.log_text("about to del filename")
+                if "filename" in user_defined_data:
+                    del user_defined_data["filename"]
+                logger.log_text("about to del external_id")
+                del user_defined_data["external_id"]
+                logger.log_text("done deling")
 
-            # The only valid values for objectIdType are DIRECT and INDIRECT, so set all
-            # values to INDIRECT if the come in the request as neither
-            if object_id_type is not None and object_id_type.upper() not in VALID_OBJECT_ID_TYPES and logged_obj_type_msg == False:
-                object_id_type = "INDIRECT"
-                info_message = "You sent a manifest file with at least one objectIdType value that was neither 'DIRECT' or 'INDIRECT' (the only values allowed for object ID type). The value was automatically replaced with a value of 'INDIRECT'."
-                logged_obj_type_msg = True
+                # The only valid values for objectIdType are DIRECT and INDIRECT, so set all
+                # values to INDIRECT if the come in the request as neither
+                if object_id_type is not None and object_id_type.upper() not in VALID_OBJECT_ID_TYPES and logged_obj_type_msg == False:
+                    object_id_type = "INDIRECT"
+                    info_message = "You sent a manifest file with at least one objectIdType value that was neither 'DIRECT' or 'INDIRECT' (the only values allowed for object ID type). The value was automatically replaced with a value of 'INDIRECT'."
+                    logged_obj_type_msg = True
 
-            record.set_fields(edc_ver_id=edc_ver_id, object_id=object_id, object_id_type=object_id_type, user_defined_values=str(user_defined_data), ra=ra, dec=dec)
+                record.set_fields(edc_ver_id=edc_ver_id, object_id=object_id, object_id_type=object_id_type, user_defined_values=str(user_defined_data), ra=ra, dec=dec)
+            else:
+                logger.log_text(f"SKIPPING: {filename} in update_meta_records_with_user_values() due to not being a key in the mapped_manifest!!")
         except Exception as e:
-            logger.log_text(e.__str__())
-            logger.log_text(f"SKIPPING: {filename} in update_meta_records_with_user_values()") 
+            logger.log_text(str(e))
+            # logger.log_text(str(e.args))
+            # logger.log_text(e.__str__())
+            logger.log_text(f"SKIPPING: {filename} in update_meta_records_with_user_values() due to exception!")
+
+    logger.log_text("processed meta_records: ")
+    logger.log_text(str(meta_records))
+
     return meta_records, info_message
 
 def build_and_upload_manifest(urls, bucket, batch_id, guid = ""):
