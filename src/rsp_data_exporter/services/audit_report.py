@@ -39,11 +39,15 @@ def fetch_audit_records(vendor_project_id):
     return str(audit_response)
 
 def insert_audit_records(vendor_project_id, mapped_manifest, owner_id):
-    logger.log_text("About to log the mapped manifest for the variable stars notebook!!")
-    logger.log_text(str(mapped_manifest))
+    # # logger.log_text("##################################################################")
+    # logger.log_text("Inside of insert audit record!! Mapped manifest: ")
+    # logger.log_text(str(mapped_manifest))
     audit_records = []
     object_ids = []
     for key in mapped_manifest:
+        # logger.log_text("##################################################################")
+        # logger.log_text("In mapped_manifest loop, loigging mapped_manifes[key]: ")
+        # logger.log_text(str(mapped_manifest[key]))
         if "objectId" in mapped_manifest[key]:
 
             object_id = mapped_manifest[key]["objectId"]
