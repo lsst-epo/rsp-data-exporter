@@ -1,7 +1,7 @@
-import os
 from sqlalchemy import select
 from google.cloud import logging
 from panoptes_client import Project
+import db as DatabaseService
 
 try:
     from ..models.citizen_science.citizen_science_batches import CitizenScienceBatches
@@ -11,18 +11,12 @@ except:
     except:
         pass
 
-DB_USER = os.environ['DB_USER']
-DB_PASS = os.environ['DB_PASS']
-DB_NAME = os.environ['DB_NAME']
-DB_HOST = os.environ['DB_HOST']
-DB_PORT = os.environ['DB_PORT']
-
 logging_client = logging.Client()
 log_name = "rsp-data-exporter.batch_service"
 logger = logging_client.logger(log_name)
 
 def get_current_active_batch_id(project_id):
-    db = CitizenScienceBatches.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+    db = DatabaseService.get_db_connection()
     stmt = select(CitizenScienceBatches).where(CitizenScienceBatches.cit_sci_proj_id == project_id).where(CitizenScienceBatches.batch_status == 'ACTIVE')
     results = db.execute(stmt)
     
@@ -40,7 +34,7 @@ def create_new_batch(project_id, vendor_batch_id):
     messages = []
 
     try:
-        db = CitizenScienceBatches.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        db = DatabaseService.get_db_connection()
         db.expire_on_commit = False
         citizen_science_batch_record = CitizenScienceBatches(cit_sci_proj_id=project_id, vendor_batch_id=vendor_batch_id, batch_status='ACTIVE')    
         db.add(citizen_science_batch_record)
@@ -67,7 +61,7 @@ def check_batch_status(project_id, vendor_project_id, test_only, data_rights_app
     messages = []
 
     try:
-        db = CitizenScienceBatches.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        db = DatabaseService.get_db_connection()
         stmt = select(CitizenScienceBatches).where(CitizenScienceBatches.cit_sci_proj_id == project_id).where(CitizenScienceBatches.batch_status == 'ACTIVE')
         results = db.execute(stmt)
         

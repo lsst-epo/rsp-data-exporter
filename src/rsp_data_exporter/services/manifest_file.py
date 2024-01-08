@@ -2,6 +2,7 @@ import os, csv, time
 from google.cloud import logging
 from google.cloud import storage
 from sqlalchemy import select, update
+import db as DatabaseService
 
 try:
     from ..models.citizen_science.citizen_science_batches import CitizenScienceBatches
@@ -18,12 +19,6 @@ logger = logging_client.logger(log_name)
 VALID_OBJECT_ID_TYPES = ["DIRECT", "INDIRECT"]
 CLOUD_STORAGE_CIT_SCI_PUBLIC = os.environ["CLOUD_STORAGE_CIT_SCI_PUBLIC"]
 
-DB_USER = os.environ['DB_USER']
-DB_PASS = os.environ['DB_PASS']
-DB_NAME = os.environ['DB_NAME']
-DB_HOST = os.environ['DB_HOST']
-DB_PORT = os.environ['DB_PORT']
-
 def check_if_manifest_file_exists(guid):
     gcs = storage.Client()
     manifest_path = guid + "/manifest.csv"
@@ -33,7 +28,7 @@ def check_if_manifest_file_exists(guid):
     return storage.Blob(bucket=bucket, name=manifest_path).exists(gcs)
 
 def lookup_manifest_url(batch_id):
-    db = CitizenScienceBatches.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+    db = DatabaseService.get_db_connection()
     stmt = select(CitizenScienceBatches).where(CitizenScienceBatches.cit_sci_batch_id == batch_id)
     results = db.execute(stmt)
     record = results.scalars().first()
@@ -43,7 +38,7 @@ def update_batch_record_with_manifest_url(manifest_url_p, batch_id):
     try:
         logger.log_text("about to update the manifest URL of the new batch")
         logger.log_text("updating batch ID #" + str(batch_id) + " with manifest URL: " + manifest_url_p)
-        db = CitizenScienceBatches.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        db = DatabaseService.get_db_connection()
         db.expire_on_commit = False
         db.execute(update(CitizenScienceBatches).where(CitizenScienceBatches.cit_sci_batch_id == batch_id).values(manifest_url=manifest_url_p))
         

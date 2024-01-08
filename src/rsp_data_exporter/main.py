@@ -1,6 +1,4 @@
-import os, fnmatch, json, csv, shutil, time, logging as py_logging, threading, glob
-from tokenize import tabsize
-from unicodedata import category # for debugging
+import os, fnmatch, json, csv, shutil, time, threading, glob
 from google.cloud import logging
 
 TEST_ONLY = bool(os.environ.get('TEST_ONLY'))
@@ -15,17 +13,11 @@ logger = logging_client.logger(log_name)
 try:
     from .models.citizen_science.citizen_science_validator import CitizenScienceValidator
     from .models.data_exporter_response import DataExporterResponse
-    from .models.data_release.data_release_diaobjects import DataReleaseDiaObjects
-    from .models.data_release.data_release_objects import DataReleaseObjects
-    from .models.data_release.data_release_forcedsources import DataReleaseForcedSources
     from .models.edc_logger import EdcLogger
 except:
     try:
         from models.citizen_science.citizen_science_validator import CitizenScienceValidator
         from models.data_exporter_response import DataExporterResponse
-        from models.data_release.data_release_diaobjects import DataReleaseDiaObjects
-        from models.data_release.data_release_objects import DataReleaseObjects
-        from models.data_release.data_release_forcedsources import DataReleaseForcedSources
         from models.edc_logger import EdcLogger
     except Exception as e:
         if TEST_ONLY == True:
@@ -34,8 +26,6 @@ except:
 
 from flask import Flask, request
 from google.cloud import storage
-import sqlalchemy
-from sqlalchemy import select
 import numpy as np
 import services.audit_report as AuditReportService
 import services.manifest_file as ManifestFileService
@@ -44,6 +34,7 @@ import services.project as ProjectService
 import services.batch as BatchService
 import services.metadata as MetadataService
 import services.lookup as LookupService
+import services.tabular_data as TabularDataService
 
 app = Flask(__name__)
 response = DataExporterResponse()
@@ -52,12 +43,6 @@ CLOUD_STORAGE_BUCKET = os.environ['CLOUD_STORAGE_BUCKET']
 CLOUD_STORAGE_BUCKET_HIPS2FITS = os.environ['CLOUD_STORAGE_BUCKET_HIPS2FITS']
 CLOUD_STORAGE_CIT_SCI_URL_PREFIX = os.environ["CLOUD_STORAGE_CIT_SCI_URL_PREFIX"]
 CLOUD_STORAGE_CIT_SCI_PUBLIC = os.environ["CLOUD_STORAGE_CIT_SCI_PUBLIC"]
-DB_USER = os.environ['DB_USER']
-DB_PASS = os.environ['DB_PASS']
-DB_NAME = os.environ['DB_NAME']
-DB_HOST = os.environ['DB_HOST']
-DB_PORT = os.environ['DB_PORT']
-db = None
 debug = False
 
 def check_test_only_var():
@@ -129,19 +114,18 @@ def download_tabular_data_and_process():
         logger.log_text("validator.error is False!")
 
         tabular_records = download_zip(CLOUD_STORAGE_BUCKET_HIPS2FITS , "manifest.csv", guid, True)
-        # to-do: Upload CSV?
         logger.log_text("about to call upload_manifest()")
         manifest_url = upload_manifest("/tmp/" + guid + "/manifest.csv")
         logger.log_text("done running upload_manifest()")
         # if data_format == "objects":
         #     logger.log_text("data_format == object, about to call create_dr_object_records")
-        #     create_dr_objects_records(csv_path, url)
+        #     create_dr_objects_records(csv_path)
         # elif data_format == "diaobjects":
         #     logger.log_text("data_format == object, about to call create_dr_diaobject_records")
-        #     create_dr_diaobject_records(csv_path, url)
+        #     create_dr_diaobject_records(csv_path)
         # elif data_format == "forcedsources":
         #     logger.log_text("data_format == object, about to call create_dr_forcedsource_records")
-        #     create_dr_forcedsource_records(csv_path, url)
+        #     create_dr_forcedsource_records(csv_path)
         # else:
         #     logger.log_text("data_format != object!!!")
         # manifest_url = transfer_tabular_manifest(urls, CLOUD_STORAGE_CIT_SCI_PUBLIC, guid)
@@ -267,162 +251,14 @@ def upload_manifest(csv_path):
     logger.log_text(blob.public_url)
     return blob.public_url
 
-def create_dr_forcedsource_records(csv_path, csv_url):
-    csv_file = open(csv_path, "rU")
-    reader = csv.DictReader(csv_file)
-    logger.log_text("about to loop CSV file contents in create_dr_forcedsource_records")
-    for row in reader:
-        try:
-            db = DataReleaseForcedSources.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-            data_release_forcedsource_record = DataReleaseForcedSources(forcedsourceid=row["forcedSourceId"],
-                                                                        objectid=row["objectId"],
-                                                                        parentobjectid=row["parentObjectId"],
-                                                                        coord_ra=row["coord_ra"],
-                                                                        coord_dec=row["coord_dec"],
-                                                                        skymap=row["skymap"],
-                                                                        tract=row["tract"],
-                                                                        patch=row["patch"],
-                                                                        band=row["band"],
-                                                                        ccdvisitid=row["ccdVisitId"],
-                                                                        detect_ispatchinner=bool(row["detect_isPatchInner"]),
-                                                                        detect_isprimary=bool(row["detect_isPrimary"]),
-                                                                        detect_istractinner=bool(row["detect_isTractInner"]),
-                                                                        localbackground_instfluxerr=row["localBackground_instFluxErr"],
-                                                                        localbackground_instflux=row["localBackground_instFlux"],
-                                                                        localphotocaliberr=row["localPhotoCalibErr"],
-                                                                        localphotocalib_flag=bool(row["localPhotoCalib_flag"]),
-                                                                        localphotocalib=row["localPhotoCalib"],
-                                                                        localwcs_cdmatrix_1_1=row["localWcs_CDMatrix_1_1"],
-                                                                        localwcs_cdmatrix_1_2=row["localWcs_CDMatrix_1_2"],
-                                                                        localwcs_cdmatrix_2_1=row["localWcs_CDMatrix_2_1"],
-                                                                        localwcs_cdmatrix_2_2=row["localWcs_CDMatrix_2_2"],
-                                                                        localwcs_flag=bool(row["localWcs_flag"]),
-                                                                        pixelflags_bad=bool(row["pixelFlags_bad"]),
-                                                                        pixelflags_crcenter=bool(row["pixelFlags_crCenter"]),
-                                                                        pixelflags_cr=bool(row["pixelFlags_cr"]),
-                                                                        pixelflags_edge=bool(row["pixelFlags_edge"]),
-                                                                        pixelflags_interpolatedcenter=bool(row["pixelFlags_interpolatedCenter"]),
-                                                                        pixelflags_interpolated=bool(row["pixelFlags_interpolated"]),
-                                                                        pixelflags_saturatedcenter=bool(row["pixelFlags_saturatedCenter"]),
-                                                                        pixelflags_saturated=bool(row["pixelFlags_saturated"]),
-                                                                        pixelflags_suspectcenter=bool(row["pixelFlags_suspectCenter"]),
-                                                                        pixelflags_suspect=bool(row["pixelFlags_suspect"]),
-                                                                        psfdifffluxerr=row["psfDiffFluxErr"],
-                                                                        psfdiffflux_flag=bool(row["psfDiffFlux_flag"]),
-                                                                        psfdiffflux=row["psfDiffFlux"],
-                                                                        psffluxerr=row["psfFluxErr"],
-                                                                        psfflux_flag=bool(row["psfFlux_flag"]),
-                                                                        psfflux=row["psfFlux"])
-            db.add(data_release_forcedsource_record)
-            db.commit()
-            db.close()
-        except Exception as e:
-            logger.log_text("an exception occurred in create_dr_forcedsource_records!")
-            logger.log_text(e.__str__())
-    return
+def create_dr_forcedsource_records(csv_path):
+    return TabularDataService.create_dr_forcedsource_records(csv_path)
 
-def create_dr_diaobject_records(csv_path, csv_url):
-    csv_file = open(csv_path, "rU")
-    reader = csv.DictReader(csv_file)
-    logger.log_text("about to loop CSV file contents in create_dr_diaobject_records")
-    
-    for row in reader:
-        try:
-            db = DataReleaseDiaObjects.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-            data_release_diaobject_record = DataReleaseDiaObjects(ra=row["ra"],
-                                                                  decl=row["decl"],
-                                                                  rpsfluxchi2=row["rPSFluxChi2"],
-                                                                  ipsfluxchi2=row["iPSFluxChi2"],
-                                                                  gpsfluxchi2=row["gPSFluxChi2"],
-                                                                  upsfluxchi2=row["uPSFluxChi2"],
-                                                                  ypsfluxchi2=row["yPSFluxChi2"],
-                                                                  zpsfluxchi2=row["zPSFluxChi2"],
-                                                                  gpsfluxmax=row["gPSFluxMax"],
-                                                                  ipsfluxmax=row["iPSFluxMax"],
-                                                                  rpsfluxmax=row["rPSFluxMax"],
-                                                                  upsfluxmax=row["uPSFluxMax"],
-                                                                  ypsfluxmax=row["yPSFluxMax"],
-                                                                  zpsfluxmax=row["zPSFluxMax"],
-                                                                  gpsfluxmin=row["gPSFluxMin"],
-                                                                  ipsfluxmin=row["iPSFluxMin"],
-                                                                  rpsfluxmin=row["rPSFluxMin"],
-                                                                  upsfluxmin=row["uPSFluxMin"],
-                                                                  ypsfluxmin=row["yPSFluxMin"],
-                                                                  zpsfluxmin=row["zPSFluxMin"],
-                                                                  gpsfluxmean=row["gPSFluxMean"],
-                                                                  ipsfluxmean=row["iPSFluxMean"],
-                                                                  rpsfluxmean=row["rPSFluxMean"],
-                                                                  upsfluxmean=row["uPSFluxMean"],
-                                                                  ypsfluxmean=row["yPSFluxMean"],
-                                                                  zpsfluxmean=row["zPSFluxMean"],
-                                                                  gpsfluxndata=row["gPSFluxNdata"],
-                                                                  ipsfluxndata=row["iPSFluxNdata"],
-                                                                  rpsfluxndata=row["rPSFluxNdata"],
-                                                                  upsfluxndata=row["uPSFluxNdata"],
-                                                                  ypsfluxndata=row["yPSFluxNdata"],
-                                                                  zpsfluxndata=row["zPSFluxNdata"])  
-            db.add(data_release_diaobject_record)
-            db.commit()
-            db.close()
-        except Exception as e:
-            logger.log_text("an exception occurred in create_dr_diaobject_records!")
-            logger.log_text(e.__str__())
-    return
+def create_dr_diaobject_records(csv_path):
+    return TabularDataService.create_dr_diaobject_records(csv_path)
 
-def create_dr_objects_records(csv_path, csv_url):
-    logger.log_text("inside of create_dr_objects_records()")
-    csv_file = open(csv_path, "rU")
-    reader = csv.DictReader(csv_file)
-    logger.log_text("about to loop CSV file contents in create_dr_objects_records")
-    for row in reader:
-        try:
-            db = DataReleaseObjects.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-            data_release_object_record = DataReleaseObjects(objectid=row["objectId"],
-                                                            coord_dec=row["coord_dec"],
-                                                            coord_ra=row["Coord_ra"],
-                                                            g_ra=row["g_ra"],
-                                                            i_ra=row["i_ra"],
-                                                            r_ra=row["r_ra"],
-                                                            u_ra=row["u_ra"],
-                                                            y_ra=row["y_ra"],
-                                                            z_ra=row["z_ra"],
-                                                            g_decl=row["g_decl"],
-                                                            i_decl=row["i_decl"],
-                                                            r_decl=row["r_decl"],
-                                                            u_decl=row["u_decl"],
-                                                            y_decl=row["y_decl"],
-                                                            z_decl=row["z_decl"],
-                                                            g_bdFluxB=row["g_bdFluxB"],
-                                                            i_bdFluxB=row["i_bdFluxB"],
-                                                            r_bdFluxB=row["r_bdFluxB"],
-                                                            u_bdFluxB=row["u_bdFluxB"],
-                                                            y_bdFluxB=row["y_bdFluxB"],
-                                                            z_bdFluxB=row["z_bdFluxB"],
-                                                            g_bdFluxD=row["g_bdFluxD"],
-                                                            i_bdFluxD=row["i_bdFluxD"],
-                                                            r_bdFluxD=row["r_bdFluxD"],
-                                                            u_bdFluxD=row["u_bdFluxD"],
-                                                            y_bdFluxD=row["y_bdFluxD"],
-                                                            z_bdFluxD=row["z_bdFluxD"],
-                                                            g_bdReB=row["g_bdReB"],
-                                                            i_bdReB=row["i_bdReB"],
-                                                            r_bdReB=row["r_bdReB"],
-                                                            u_bdReB=row["u_bdReB"],
-                                                            y_bdReB=row["y_bdReB"],
-                                                            z_bdReB=row["z_bdReB"],
-                                                            g_bdReD=row["g_bdReD"],
-                                                            i_bdReD=row["i_bdReD"],
-                                                            r_bdReD=row["r_bdReD"],
-                                                            u_bdReD=row["u_bdReD"],
-                                                            y_bdReD=row["y_bdReD"],
-                                                            z_bdReD=row["z_bdReD"])    
-            db.add(data_release_object_record)
-            db.commit()
-            db.close()
-        except Exception as e:
-            logger.log_text("an exception occurred in create_dr_object_records!")
-            logger.log_text(e.__str__())
-    return
+def create_dr_objects_records(csv_path):
+    return TabularDataService.create_dr_objects_records(csv_path)
 
 def upload_cutouts(cutouts, vendor_project_id):
     global debug
@@ -623,25 +459,25 @@ def validate_project_metadata(email, vendor_project_id, vendor_batch_id = None):
             else:
                 return False
         else:
-            logger.log_text("about to check if create_edc_logger_record() needs to be called")
-            if validator.log_to_edc:
-                logger.log_text("calling! create_edc_logger_record()")
-                create_edc_logger_record()
+            # logger.log_text("about to check if create_edc_logger_record() needs to be called")
+            # if validator.log_to_edc:
+            #     logger.log_text("calling! create_edc_logger_record()")
+            #     create_edc_logger_record()
             return False
     else:
         return False
 
-def create_edc_logger_record():
-    db = EdcLogger.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-    notes_obj = json.loads(validator.edc_logger_notes)
+# def create_edc_logger_record():
+#     db = EdcLogger.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+#     notes_obj = json.loads(validator.edc_logger_notes)
 
-    edc_logger_record = EdcLogger(application_name="rsp-data-exporter", run_id=notes_obj.vendor_batch_id, notes=validator.edc_logger_notes, category=validator.edc_logger_category)
-    logger.log_text("about to commit edc-logger record")
-    db.add(edc_logger_record)
-    db.commit()
-    db.close()
-    logger.log_text("committed edc-logger record!")
-    return
+#     edc_logger_record = EdcLogger(application_name="rsp-data-exporter", run_id=notes_obj.vendor_batch_id, notes=validator.edc_logger_notes, category=validator.edc_logger_category)
+#     logger.log_text("about to commit edc-logger record")
+#     db.add(edc_logger_record)
+#     db.commit()
+#     db.close()
+#     logger.log_text("committed edc-logger record!")
+#     return
         
 def create_new_batch(project_id, vendor_batch_id):
     global validator, response, debug
@@ -716,48 +552,9 @@ def insert_lookup_records(meta_records, project_id, batch_id):
     return LookupService.insert_lookup_records(meta_records, project_id, batch_id)
 
 def locate(pattern, root_path):
-    for path, dirs, files in os.walk(os.path.abspath(root_path)):
+    for path, files in os.walk(os.path.abspath(root_path)):
         for filename in fnmatch.filter(files, pattern):
             return [os.path.join(path, filename), filename ]
-
-def init_connection_engine():
-    db_config = {
-        # [START cloud_sql_postgres_sqlalchemy_limit]
-        # Pool size is the maximum number of permanent connections to keep.
-        "pool_size": 10,
-        # Temporarily exceeds the set pool_size if no connections are available.
-        "max_overflow": 2,
-        # The total number of concurrent connections for your application will be
-        # a total of pool_size and max_overflow.
-        # [END cloud_sql_postgres_sqlalchemy_limit]
-
-        # [START cloud_sql_postgres_sqlalchemy_backoff]
-        # SQLAlchemy automatically uses delays between failed connection attempts,
-        # but provides no arguments for configuration.
-        # [END cloud_sql_postgres_sqlalchemy_backoff]
-
-        # [START cloud_sql_postgres_sqlalchemy_timeout]
-        # 'pool_timeout' is the maximum number of seconds to wait when retrieving a
-        # new connection from the pool. After the specified amount of time, an
-        # exception will be thrown.
-        "pool_timeout": 30,  # 30 seconds
-        # [END cloud_sql_postgres_sqlalchemy_timeout]
-
-        # [START cloud_sql_postgres_sqlalchemy_lifetime]
-        # 'pool_recycle' is the maximum number of seconds a connection can persist.
-        # Connections that live longer than the specified amount of time will be
-        # reestablished
-        "pool_recycle": 1800,  # 30 minutes
-        # [END cloud_sql_postgres_sqlalchemy_lifetime]
-    }
-
-
-    return init_tcp_connection_engine(db_config)
-
-def init_tcp_connection_engine(db_config):
-    pool = sqlalchemy.create_engine("postgresql://{}:{}@{}:{}/{}".format(DB_USER, DB_PASS, DB_HOST, DB_PORT, DB_NAME))
-    pool.dialect.description_encoding = None
-    return pool
 
 def time_mark(debug, milestone):
     if debug == True:

@@ -1,6 +1,6 @@
-import os
 from sqlalchemy import select
 from google.cloud import logging
+import db as DatabaseService
 
 try:
     from ..models.citizen_science.citizen_science_proj_meta_lookup import CitizenScienceProjMetaLookup
@@ -14,14 +14,8 @@ logging_client = logging.Client()
 log_name = "rsp-data-exporter.lookup_service"
 logger = logging_client.logger(log_name)
 
-DB_USER = os.environ['DB_USER']
-DB_PASS = os.environ['DB_PASS']
-DB_NAME = os.environ['DB_NAME']
-DB_HOST = os.environ['DB_HOST']
-DB_PORT = os.environ['DB_PORT']
-
 def query_lookup_records(project_id, batch_id):
-    db = CitizenScienceProjMetaLookup.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+    db = DatabaseService.get_db_connection()
     query = select(CitizenScienceProjMetaLookup).where(CitizenScienceProjMetaLookup.cit_sci_proj_id == project_id).where(CitizenScienceProjMetaLookup.cit_sci_batch_id == int(batch_id))
     lookup_records = db.execute(query)
     db.commit()
@@ -41,7 +35,7 @@ def insert_lookup_records(meta_records, project_id, batch_id):
         lookup_records.append(CitizenScienceProjMetaLookup(cit_sci_proj_id=project_id, cit_sci_meta_id=record.cit_sci_meta_id, cit_sci_batch_id=batch_id))
 
     try:
-        db = CitizenScienceProjMetaLookup.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        db = DatabaseService.get_db_connection()
         db.bulk_save_objects(lookup_records)
         db.commit()
         db.flush()

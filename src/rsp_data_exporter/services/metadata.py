@@ -1,6 +1,7 @@
-import os, time
+import time, json
 from sqlalchemy import select
 from google.cloud import logging
+import db as DatabaseService
 
 try:
     from ..models.citizen_science.citizen_science_meta import CitizenScienceMeta
@@ -13,12 +14,6 @@ except:
 logging_client = logging.Client()
 log_name = "rsp-data-exporter.metadata_service"
 logger = logging_client.logger(log_name)
-
-DB_USER = os.environ['DB_USER']
-DB_PASS = os.environ['DB_PASS']
-DB_NAME = os.environ['DB_NAME']
-DB_HOST = os.environ['DB_HOST']
-DB_PORT = os.environ['DB_PORT']
 
 def create_meta_records(urls):
     meta_records = []
@@ -33,7 +28,7 @@ def insert_meta_records(meta_records):
     logger.log_text("about to bulk insert meta records in insert_meta_records()!!")
 
     try:
-        db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        db = DatabaseService.get_db_connection()
         db.expire_on_commit = False
         db.bulk_save_objects(meta_records, return_defaults=True)
         db.commit()
@@ -50,7 +45,7 @@ def lookup_meta_record(objectId, objectIdType, meta_id = None):
     metaId = None
     try:
         if meta_id == None:
-            db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+            db = DatabaseService.get_db_connection()
             stmt = select(CitizenScienceMeta).where(CitizenScienceMeta.object_id == objectId).where(CitizenScienceMeta.object_id_type == objectIdType)
             results = db.execute(stmt)
             for row in results.scalars():
@@ -61,7 +56,7 @@ def lookup_meta_record(objectId, objectIdType, meta_id = None):
             logger.log_text("about to log metaId (queried via objectId/objectIdType) in lookup_meta_record()")
             logger.log_text(str(metaId))
         else:
-            db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+            db = DatabaseService.get_db_connection()
             stmt = select(CitizenScienceMeta).where(CitizenScienceMeta.cit_sci_meta_id == meta_id)
             results = db.execute(stmt)
             for row in results.scalars():

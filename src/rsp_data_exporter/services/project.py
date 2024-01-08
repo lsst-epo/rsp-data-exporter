@@ -1,6 +1,7 @@
 import os
 from sqlalchemy import select
 from google.cloud import logging
+import db as DatabaseService
 
 try:
     from ..models.citizen_science.citizen_science_projects import CitizenScienceProjects
@@ -10,11 +11,6 @@ except:
     except:
         pass
 
-DB_USER = os.environ['DB_USER']
-DB_PASS = os.environ['DB_PASS']
-DB_NAME = os.environ['DB_NAME']
-DB_HOST = os.environ['DB_HOST']
-DB_PORT = os.environ['DB_PORT']
 CLOSED_PROJECT_STATUSES = ["COMPLETE", "CANCELLED", "ABANDONED"]
 
 logging_client = logging.Client()
@@ -30,7 +26,7 @@ def lookup_project_record(vendor_project_id):
     logger.log_text(vendor_project_id)
 
     try:
-        db = CitizenScienceProjects.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        db = DatabaseService.get_db_connection()
         stmt = select(CitizenScienceProjects).where(CitizenScienceProjects.vendor_project_id == int(vendor_project_id))
 
         logger.log_text("about to execute query in lookup_project_record")
@@ -63,15 +59,13 @@ def create_new_project_record(owner_id, vendor_project_id):
     messages = []
     try:
         logger.log_text("about to create new project record!")
-        db = CitizenScienceProjects.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        db = DatabaseService.get_db_connection()
         citizen_science_project_record = CitizenScienceProjects(vendor_project_id=vendor_project_id, owner_id=owner_id, project_status='ACTIVE', excess_data_exception=False, data_rights_approved=False)
         db.add(citizen_science_project_record)
         db.commit()
         project_id = citizen_science_project_record.cit_sci_proj_id
 
     except Exception as e:
-        # validator.error = True
-        # response.status = "error"
         messages.append("An error occurred while attempting to create a new project owner record for you - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
         logger.log_text("An exception occurred while creating a new project record")
         logger.log_text(e.__str__())
