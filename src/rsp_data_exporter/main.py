@@ -5,7 +5,7 @@ from google.cloud import logging
 
 TEST_ONLY = bool(os.environ.get('TEST_ONLY'))
 logging_client = logging.Client()
-log_name = "rsp-data-exporter"
+log_name = "rsp-data-exporter.main"
 if TEST_ONLY == True:
     log_name = "rsp-data-exporter-tests"
 logger = logging_client.logger(log_name)
@@ -15,12 +15,6 @@ logger = logging_client.logger(log_name)
 try:
     from .models.citizen_science.citizen_science_validator import CitizenScienceValidator
     from .models.data_exporter_response import DataExporterResponse
-    from .models.citizen_science.citizen_science_batches import CitizenScienceBatches
-    from .models.citizen_science.citizen_science_projects import CitizenScienceProjects
-    from .models.citizen_science.citizen_science_owners import CitizenScienceOwners
-    from .models.citizen_science.citizen_science_meta import CitizenScienceMeta
-    from .models.citizen_science.citizen_science_proj_meta_lookup import CitizenScienceProjMetaLookup
-    from .models.citizen_science.citizen_science_audit import CitizenScienceAudit
     from .models.data_release.data_release_diaobjects import DataReleaseDiaObjects
     from .models.data_release.data_release_objects import DataReleaseObjects
     from .models.data_release.data_release_forcedsources import DataReleaseForcedSources
@@ -29,12 +23,6 @@ except:
     try:
         from models.citizen_science.citizen_science_validator import CitizenScienceValidator
         from models.data_exporter_response import DataExporterResponse
-        from models.citizen_science.citizen_science_batches import CitizenScienceBatches
-        from models.citizen_science.citizen_science_projects import CitizenScienceProjects
-        from models.citizen_science.citizen_science_owners import CitizenScienceOwners
-        from models.citizen_science.citizen_science_meta import CitizenScienceMeta
-        from models.citizen_science.citizen_science_proj_meta_lookup import CitizenScienceProjMetaLookup
-        from models.citizen_science.citizen_science_audit import CitizenScienceAudit
         from models.data_release.data_release_diaobjects import DataReleaseDiaObjects
         from models.data_release.data_release_objects import DataReleaseObjects
         from models.data_release.data_release_forcedsources import DataReleaseForcedSources
@@ -46,8 +34,6 @@ except:
 
 from flask import Flask, request
 from google.cloud import storage
-import panoptes_client
-from panoptes_client import Panoptes, Project, SubjectSet
 import sqlalchemy
 from sqlalchemy import select
 import numpy as np
@@ -56,6 +42,8 @@ import services.manifest_file as ManifestFileService
 import services.owner as OwnerService
 import services.project as ProjectService
 import services.batch as BatchService
+import services.metadata as MetadataService
+import services.lookup as LookupService
 
 app = Flask(__name__)
 response = DataExporterResponse()
@@ -99,17 +87,7 @@ def get_batch_metadata():
     })
 
 def query_lookup_records(project_id, batch_id):
-    db = CitizenScienceProjMetaLookup.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-    query = select(CitizenScienceProjMetaLookup).where(CitizenScienceProjMetaLookup.cit_sci_proj_id == project_id).where(CitizenScienceProjMetaLookup.cit_sci_batch_id == int(batch_id))
-    lookup_records = db.execute(query)
-    db.commit()
-    meta_ids = []
-    for row in lookup_records.scalars():
-        logger.log_text("looping through lookup results")
-        logger.log_text(str(row))
-        meta_ids.append(row.cit_sci_meta_id)
-    
-    return meta_ids
+    return LookupService.query_lookup_records(project_id, batch_id)
 
 @app.route("/citizen-science-ingest-status")
 def check_status_of_previously_executed_ingest():
@@ -269,35 +247,7 @@ def update_batch_record_with_manifest_url(manifest_url_p):
     return ManifestFileService.update_batch_record_with_manifest_url(manifest_url_p, validator.batch_id)
 
 def create_tabular_meta_records(tabular_records):
-    logger.log_text("Creating meta records for tabular dataset")
-    
-    meta_records = []
-    column_names = tabular_records.pop(0)
-    logger.log_text("logging column_names after pop:")
-    logger.log_text(str(column_names))
-
-    # Source ID will be extracted directly
-    obj_id_idx = column_names.index("objectId")
-    column_names.pop(obj_id_idx)
-
-    for row in tabular_records:
-        metadata = {}
-
-        # Extract the canonical fields so that all that is left are the user-defined values which can be joined
-        source_id = row.pop(obj_id_idx)
-        for c_idx, col in enumerate(row):
-            metadata[column_names[c_idx]] = col
-
-        user_defined_values = json.dumps(metadata)
-
-        logger.log_text("Logging user_defined_values for source_id: " + str(source_id))
-        logger.log_text(user_defined_values)
-
-        public = True
-        edc_ver_id = round(time.time() * 1000) + 1
-        meta_records.append(CitizenScienceMeta(edc_ver_id=edc_ver_id, source_id=source_id, source_id_type="objectId", public=public, user_defined_values=user_defined_values))
-    
-    return meta_records
+    return MetadataService.create_tabular_meta_records(tabular_records)
 
 def update_meta_records_with_user_values(meta_records):
     user_defined_values, info_message = ManifestFileService.update_meta_records_with_user_values(meta_records, validator.mapped_manifest)
@@ -523,29 +473,10 @@ def upload_cutout_arr(cutouts, i):
     return urls
         
 def create_meta_records(urls):
-    meta_records = []
-    for url in urls:
-        edcVerId = round(time.time() * 1000)
-        public = True
-        meta_records.append(CitizenScienceMeta(edc_ver_id=edcVerId, uri=url, public=public))
-        pass
-    return meta_records
+    return MetadataService.create_meta_records(urls)
 
 def insert_meta_records(meta_records):
-    logger.log_text("about to bulk insert meta records in insert_meta_records()!!")
-
-    try:
-        db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-        db.expire_on_commit = False
-        db.bulk_save_objects(meta_records, return_defaults=True)
-        db.commit()
-        db.flush()
-    except Exception as e:
-        logger.log_text("an exception occurred in insert_meta_records!")
-        logger.log_text(e.__str__())
-
-    logger.log_text("done bulk inserting meta records!")
-    return meta_records
+    return MetadataService.insert_meta_records(meta_records)
 
 def download_zip(bucket_name, filename, guid, is_tabular_dataset = False):
     global response, validator, db, debug
@@ -778,63 +709,11 @@ def lookup_owner_record(email):
         response.messages.append(messages)
     return owner_id
 
-def lookup_meta_record(objectId, objectIdType, meta_id = None):
-    meta_records = []
-    metaId = None
-    try:
-        if meta_id == None:
-            db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-            stmt = select(CitizenScienceMeta).where(CitizenScienceMeta.object_id == objectId).where(CitizenScienceMeta.object_id_type == objectIdType)
-            results = db.execute(stmt)
-            for row in results.scalars():
-                metaId = row.cit_sci_meta_id
- 
-            db.close()
-
-            logger.log_text("about to log metaId (queried via objectId/objectIdType) in lookup_meta_record()")
-            logger.log_text(str(metaId))
-        else:
-            db = CitizenScienceMeta.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-            stmt = select(CitizenScienceMeta).where(CitizenScienceMeta.cit_sci_meta_id == meta_id)
-            results = db.execute(stmt)
-            for row in results.scalars():
-                meta_records.append({
-                    "edc_ver_id": row.edc_ver_id,
-                    "object_id": row.object_id,
-                    "object_id_type": row.object_id_type,
-                    "cutout_url": row.uri,
-                    "date_transferred": str(row.date_created)
-                })
-
-            db.close()
-
-            logger.log_text("about to log meta record count (queried by batch_id) in lookup_meta_record()")
-            logger.log_text(str(len(meta_records)))
-            return meta_records
-    except Exception as e:
-        logger.log_text(e.__str__())
-        return e
-   
-    return metaId
+def lookup_meta_record(object_id, object_id_type, meta_id = None):
+    return MetadataService.lookup_meta_record(object_id, object_id_type, meta_id)
 
 def insert_lookup_records(meta_records, project_id, batch_id):
-    logger.log_text("About to insert lookup record")
-    lookup_records = []
-
-    for record in meta_records:
-        lookup_records.append(CitizenScienceProjMetaLookup(cit_sci_proj_id=project_id, cit_sci_meta_id=record.cit_sci_meta_id, cit_sci_batch_id=batch_id))
-
-    try:
-        db = CitizenScienceProjMetaLookup.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
-        db.bulk_save_objects(lookup_records)
-        db.commit()
-        db.flush()
-    except Exception as e:
-        logger.log_text("An exception occurred while trying to insert lookup record!!")
-        logger.log_text(e.__str__())
-        return False
-        
-    return True
+    return LookupService.insert_lookup_records(meta_records, project_id, batch_id)
 
 def locate(pattern, root_path):
     for path, dirs, files in os.walk(os.path.abspath(root_path)):
