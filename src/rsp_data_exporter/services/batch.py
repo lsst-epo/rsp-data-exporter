@@ -1,7 +1,7 @@
 from sqlalchemy import select
 from google.cloud import logging
 from panoptes_client import Project
-import db as DatabaseService
+from . import db as DatabaseService
 
 try:
     from ..models.citizen_science.citizen_science_batches import CitizenScienceBatches

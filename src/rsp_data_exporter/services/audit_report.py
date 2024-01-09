@@ -1,7 +1,7 @@
 from sqlalchemy import select, func
 from google.cloud import logging
 from panoptes_client import Project
-import db as DatabaseService
+from . import db as DatabaseService
 
 logging_client = logging.Client()
 log_name = "rsp-data-exporter.audit_service"

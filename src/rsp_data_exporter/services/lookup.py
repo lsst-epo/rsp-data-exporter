@@ -1,6 +1,6 @@
 from sqlalchemy import select
 from google.cloud import logging
-import db as DatabaseService
+from . import db as DatabaseService
 
 try:
     from ..models.citizen_science.citizen_science_proj_meta_lookup import CitizenScienceProjMetaLookup

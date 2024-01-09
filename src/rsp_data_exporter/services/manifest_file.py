@@ -2,7 +2,7 @@ import os, csv, time
 from google.cloud import logging
 from google.cloud import storage
 from sqlalchemy import select, update
-import db as DatabaseService
+from . import db as DatabaseService
 
 try:
     from ..models.citizen_science.citizen_science_batches import CitizenScienceBatches

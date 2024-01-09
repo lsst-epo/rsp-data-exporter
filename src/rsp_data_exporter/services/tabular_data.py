@@ -1,6 +1,7 @@
-import os, csv
+import csv
 # from sqlalchemy import select
 from google.cloud import logging
+from . import db as DatabaseService
 
 try:
     from ..models.data_release.data_release_diaobjects import DataReleaseDiaObjects
@@ -14,7 +15,7 @@ except:
     except:
         pass
 
-import db as DatabaseService
+
 
 logging_client = logging.Client()
 log_name = "rsp-data-exporter.tabular_data_service"

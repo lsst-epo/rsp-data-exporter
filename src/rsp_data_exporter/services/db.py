@@ -1,5 +1,6 @@
-import sqlalchemy, os
-from sqlalchemy import sessionmaker
+import os
+import sqlalchemy
+from sqlalchemy.orm import sessionmaker
 
 DB_USER = os.environ['DB_USER']
 DB_PASS = os.environ['DB_PASS']
