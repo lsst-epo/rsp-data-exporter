@@ -13,11 +13,27 @@ logger = logging_client.logger(log_name)
 try:
     from .models.citizen_science.citizen_science_validator import CitizenScienceValidator
     from .models.data_exporter_response import DataExporterResponse
+    from .services import audit_report as AuditReportService
+    from .services import manifest_file as ManifestFileService
+    from .services import owner as OwnerService
+    from .services import project as ProjectService
+    from .services import batch as BatchService
+    from .services import metadata as MetadataService
+    from .services import lookup as LookupService
+    from .services import file as FileService
     # from .models.edc_logger import EdcLogger
 except:
     try:
         from models.citizen_science.citizen_science_validator import CitizenScienceValidator
         from models.data_exporter_response import DataExporterResponse
+        import services.audit_report as AuditReportService
+        import services.manifest_file as ManifestFileService
+        import services.owner as OwnerService
+        import services.project as ProjectService
+        import services.batch as BatchService
+        import services.metadata as MetadataService
+        import services.lookup as LookupService
+        import services.file as FileService
         # from models.edc_logger import EdcLogger
     except Exception as e:
         if TEST_ONLY == True:
@@ -26,14 +42,7 @@ except:
 
 from flask import Flask, request
 from google.cloud import storage
-import services.audit_report as AuditReportService
-import services.manifest_file as ManifestFileService
-import services.owner as OwnerService
-import services.project as ProjectService
-import services.batch as BatchService
-import services.metadata as MetadataService
-import services.lookup as LookupService
-import services.file as FileService
+
 # import services.tabular_data as TabularDataService
 
 app = Flask(__name__)
@@ -101,13 +110,10 @@ def download_tabular_data_and_process():
         tabular_records = download_zip(CLOUD_STORAGE_BUCKET_HIPS2FITS , "manifest.csv", guid, validator.data_rights_approved, True)
         manifest_url = ManifestFileService.upload_manifest("/tmp/" + guid + "/manifest.csv")
         # if data_format == "objects":
-        #     logger.log_text("data_format == object, about to call create_dr_object_records")
         #     TabularDatService.create_dr_objects_records(csv_path)
         # elif data_format == "diaobjects":
-        #     logger.log_text("data_format == object, about to call create_dr_diaobject_records")
         #     TabularDatService.create_dr_diaobject_records(csv_path)
         # elif data_format == "forcedsources":
-        #     logger.log_text("data_format == object, about to call create_dr_forcedsource_records")
         #     TabularDatService.create_dr_forcedsource_records(csv_path)
         # else:
         #     logger.log_text("data_format != object!!!")
@@ -129,7 +135,6 @@ def download_tabular_data_and_process():
 
 @app.route("/citizen-science-image-ingest")
 def download_image_data_and_process():
-    logger.log_text("/citizen-science-image-ingest hit!")
     global response, validator, debug, urls
     guid = request.args.get("guid")
     email = request.args.get("email")
@@ -141,20 +146,12 @@ def download_image_data_and_process():
     validator = CitizenScienceValidator()
     urls = []
 
-    logger.log_text("guid: ")
-    logger.log_text(guid)
-
     time_mark(debug, __name__)
 
     validate_project_metadata(email, vendor_project_id, vendor_batch_id) 
     
-    logger.log_text("just validated project metadata")
     if validator.error is False:
-        logger.log_text("validator.error is False!")
-    
         # astro cutouts data
-        logger.log_text("about to log CLOUD_STORAGE_BUCKET_HIPS2FITS before calling download_zip:")
-        logger.log_text(CLOUD_STORAGE_BUCKET_HIPS2FITS);
         cutouts = download_zip(CLOUD_STORAGE_BUCKET_HIPS2FITS, guid + ".zip", guid, validator.data_rights_approved)
 
         if validator.error is False:
@@ -165,8 +162,7 @@ def download_image_data_and_process():
                 manifest_url = build_and_upload_manifest(urls, CLOUD_STORAGE_CIT_SCI_PUBLIC, guid)
                 updated_meta_records = update_meta_records_with_user_values(meta_records)
                 meta_records_with_id = MetadataService.insert_meta_records(updated_meta_records)
-                lookup_status = LookupService.insert_lookup_records(meta_records_with_id, validator.project_id, validator.batch_id)
-                logger.log_text("lookup_status: " + str(lookup_status))
+                LookupService.insert_lookup_records(meta_records_with_id, validator.project_id, validator.batch_id)
                 response.status = "success"
                 response.manifest_url = manifest_url
 
@@ -178,7 +174,6 @@ def download_image_data_and_process():
                 if len(audit_messages) > 0:
                     response.messages = response.messages + audit_messages
     else:
-        logger.log_text("validator.error is True!")
         response.status = "error"
         if response.messages == None or len(response.messages) == 0:
             response.messages.append("An error occurred while processing the data batch, please try again later.")
@@ -194,7 +189,7 @@ def fetch_audit_records():
     try:
         return AuditReportService.fetch_audit_records(vendor_project_id)
     except Exception as e:
-        logger.log_text("an exception occurred in fetch_audit_records!")
+        logger.log_text("An exception occurred in fetch_audit_records!")
         logger.log_text(e.__str__())
         response = DataExporterResponse()
         response.status = "ERROR"
@@ -207,7 +202,7 @@ def insert_audit_records(vendor_project_id):
     try:
         return AuditReportService.insert_audit_records(vendor_project_id, validator.mapped_manifest, validator.owner_id)
     except Exception as e:
-        logger.log_text("an exception occurred in insert_audit_records!")
+        logger.log_text("An exception occurred in insert_audit_records!")
         logger.log_text(e.__str__())
         response = DataExporterResponse()
         response.status = "ERROR"
@@ -249,7 +244,6 @@ def transfer_tabular_manifest(bucket, guid):
     bucket = gcs.bucket(bucket)
 
     manifestBlob = bucket.blob(guid + "/manifest.csv")
-    logger.log_text("about to upload the new manifest to GCS")
     manifestBlob.upload_from_filename("/tmp/" + guid + "/manifest.csv")
     ManifestFileService.update_batch_record_with_manifest_url(manifestBlob.public_url)
     return manifestBlob.public_url
@@ -315,11 +309,9 @@ def validate_project_metadata(email, vendor_project_id, vendor_batch_id = None):
 #     notes_obj = json.loads(validator.edc_logger_notes)
 
 #     edc_logger_record = EdcLogger(application_name="rsp-data-exporter", run_id=notes_obj.vendor_batch_id, notes=validator.edc_logger_notes, category=validator.edc_logger_category)
-#     logger.log_text("about to commit edc-logger record")
 #     db.add(edc_logger_record)
 #     db.commit()
 #     db.close()
-#     logger.log_text("committed edc-logger record!")
 #     return
         
 def create_new_batch(project_id, vendor_batch_id):
