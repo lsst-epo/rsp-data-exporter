@@ -74,6 +74,7 @@ def lookup_meta_record(objectId, objectIdType, meta_id = None):
             logger.log_text(str(len(meta_records)))
             return meta_records
     except Exception as e:
+        print(e)
         logger.log_text(e.__str__())
         return e
    
