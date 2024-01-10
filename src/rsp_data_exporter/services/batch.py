@@ -51,7 +51,7 @@ def create_new_batch(project_id, vendor_batch_id):
         logger.log_text("End of exception logging")
         messages.append("An error occurred while attempting to create a new data batch record for you - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
 
-    return batch_id
+    return batch_id, messages
 
 def check_batch_status(project_id, vendor_project_id, test_only, data_rights_approved):
     logger.log_text("inside of check_batch_status, logging project_id : " + str(project_id))
