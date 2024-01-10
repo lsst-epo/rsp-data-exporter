@@ -1,27 +1,3 @@
---
--- PostgreSQL database dump
---
-
--- Dumped from database version 13.12
--- Dumped by pg_dump version 15.2
-
--- Started on 2024-01-10 15:11:26 MST
-
--- SET statement_timeout = 0;
--- SET lock_timeout = 0;
--- SET idle_in_transaction_session_timeout = 0;
--- SET client_encoding = 'UTF8';
--- SET standard_conforming_strings = on;
--- SELECT pg_catalog.set_config('search_path', '', false);
--- SET check_function_bodies = false;
--- SET xmloption = content;
--- SET client_min_messages = warning;
--- SET row_security = off;
-
--- --
--- TOC entry 5 (class 2615 OID 2200)
--- Name: public; Type: SCHEMA; Schema: -; Owner: cloudsqlsuperuser
---
 
 CREATE DATABASE astro_artifacts WITH TEMPLATE = template0 ENCODING = 'UTF8' LOCALE = 'en_US.UTF8';
 
@@ -39,71 +15,6 @@ SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
 
--- *not* creating schema, since initdb creates it
-
-
--- ALTER SCHEMA public OWNER TO cloudsqlsuperuser;
-
--- --
--- -- TOC entry 711 (class 1247 OID 54246)
--- -- Name: emaildeliverytype; Type: TYPE; Schema: public; Owner: astro_objects
--- --
-
--- CREATE TYPE public.emaildeliverytype AS ENUM (
---     'attachment',
---     'inline'
--- );
-
-
--- ALTER TYPE public.emaildeliverytype OWNER TO astro_objects;
-
--- --
--- -- TOC entry 720 (class 1247 OID 54390)
--- -- Name: objecttypes; Type: TYPE; Schema: public; Owner: astro_objects
--- --
-
--- CREATE TYPE public.objecttypes AS ENUM (
---     'query',
---     'chart',
---     'dashboard',
---     'dataset'
--- );
-
-
--- ALTER TYPE public.objecttypes OWNER TO astro_objects;
-
---
--- TOC entry 714 (class 1247 OID 54284)
--- Name: sliceemailreportformat; Type: TYPE; Schema: public; Owner: astro_objects
---
-
--- CREATE TYPE public.sliceemailreportformat AS ENUM (
---     'visualization',
---     'data'
--- );
-
-
--- ALTER TYPE public.sliceemailreportformat OWNER TO astro_objects;
-
---
--- TOC entry 717 (class 1247 OID 54360)
--- Name: tagtypes; Type: TYPE; Schema: public; Owner: astro_objects
---
-
--- CREATE TYPE public.tagtypes AS ENUM (
---     'custom',
---     'type',
---     'owner',
---     'favorited_by'
--- );
-
-
--- ALTER TYPE public.tagtypes OWNER TO astro_objects;
-
--- SET default_tablespace = '';
-
--- SET default_table_access_method = heap;
-
 --
 -- TOC entry 213 (class 1259 OID 52745)
 -- Name: alert_query_store; Type: TABLE; Schema: public; Owner: rubin
@@ -117,9 +28,6 @@ CREATE TABLE public.alert_query_store (
     date_created timestamp without time zone DEFAULT now()
 );
 
-
--- ALTER TABLE public.alert_query_store OWNER TO rubin;
-
 --
 -- TOC entry 212 (class 1259 OID 52743)
 -- Name: alert_query_store_edc_alert_query_id_seq; Type: SEQUENCE; Schema: public; Owner: rubin
@@ -131,9 +39,6 @@ CREATE SEQUENCE public.alert_query_store_edc_alert_query_id_seq
     NO MINVALUE
     NO MAXVALUE
     CACHE 1;
-
-
--- ALTER TABLE public.alert_query_store_edc_alert_query_id_seq OWNER TO rubin;
 
 --
 -- TOC entry 3729 (class 0 OID 0)
@@ -160,9 +65,6 @@ CREATE TABLE public.alert_stream_payloads (
     template_stamp_url character varying(255)
 );
 
-
--- ALTER TABLE public.alert_stream_payloads OWNER TO rubin;
-
 --
 -- TOC entry 210 (class 1259 OID 52595)
 -- Name: alert_stream_payloads_edc_alert_stream_id_seq; Type: SEQUENCE; Schema: public; Owner: rubin
@@ -174,9 +76,6 @@ CREATE SEQUENCE public.alert_stream_payloads_edc_alert_stream_id_seq
     NO MINVALUE
     NO MAXVALUE
     CACHE 1;
-
-
--- ALTER TABLE public.alert_stream_payloads_edc_alert_stream_id_seq OWNER TO rubin;
 
 --
 -- TOC entry 3732 (class 0 OID 0)
@@ -203,9 +102,6 @@ CREATE TABLE public.astro_objects (
     distance numeric
 );
 
-
--- ALTER TABLE public.astro_objects OWNER TO rubin;
-
 --
 -- TOC entry 224 (class 1259 OID 135865)
 -- Name: cit_sci_audit_pk; Type: SEQUENCE; Schema: public; Owner: rubin
@@ -217,9 +113,6 @@ CREATE SEQUENCE public.cit_sci_audit_pk
     NO MINVALUE
     NO MAXVALUE
     CACHE 1;
-
-
--- ALTER TABLE public.cit_sci_audit_pk OWNER TO rubin;
 
 --
 -- TOC entry 223 (class 1259 OID 135567)
@@ -233,9 +126,6 @@ CREATE TABLE public.citizen_science_audit (
     date_created timestamp with time zone DEFAULT now() NOT NULL,
     cit_sci_audit_id bigint DEFAULT nextval('public.cit_sci_audit_pk'::regclass) NOT NULL
 );
-
-
--- ALTER TABLE public.citizen_science_audit OWNER TO rubin;
 
 --
 -- TOC entry 208 (class 1259 OID 36368)
@@ -251,9 +141,6 @@ CREATE TABLE public.citizen_science_batches (
     date_last_updated timestamp with time zone,
     manifest_url character varying(255)
 );
-
-
--- ALTER TABLE public.citizen_science_batches OWNER TO rubin;
 
 --
 -- TOC entry 209 (class 1259 OID 36394)
@@ -290,9 +177,6 @@ CREATE TABLE public.citizen_science_meta (
     object_id_type character varying(50)
 );
 
-
--- ALTER TABLE public.citizen_science_meta OWNER TO rubin;
-
 --
 -- TOC entry 202 (class 1259 OID 27733)
 -- Name: citizen_science_meta_cit_sci_meta_id_seq; Type: SEQUENCE; Schema: public; Owner: rubin
@@ -320,9 +204,6 @@ CREATE TABLE public.citizen_science_owners (
     date_created timestamp with time zone DEFAULT now() NOT NULL
 );
 
-
--- ALTER TABLE public.citizen_science_owners OWNER TO rubin;
-
 --
 -- TOC entry 204 (class 1259 OID 27787)
 -- Name: citizen_science_owners_cit_sci_owner_id_seq; Type: SEQUENCE; Schema: public; Owner: rubin
@@ -349,9 +230,6 @@ CREATE TABLE public.citizen_science_proj_meta_lookup (
     cit_sci_batch_id bigint,
     cit_sci_lookup_id bigint NOT NULL
 );
-
-
--- ALTER TABLE public.citizen_science_proj_meta_lookup OWNER TO rubin;
 
 --
 -- TOC entry 214 (class 1259 OID 53145)
@@ -383,9 +261,6 @@ CREATE TABLE public.citizen_science_projects (
     date_completed timestamp with time zone,
     data_rights_approved boolean DEFAULT false NOT NULL
 );
-
-
--- ALTER TABLE public.citizen_science_projects OWNER TO rubin;
 
 --
 -- TOC entry 206 (class 1259 OID 27796)
@@ -442,9 +317,6 @@ CREATE TABLE public.data_release_diaobjects (
     ypsfluxndata double precision,
     zpsfluxndata double precision
 );
-
-
--- ALTER TABLE public.data_release_diaobjects OWNER TO rubin;
 
 --
 -- TOC entry 217 (class 1259 OID 53259)
@@ -508,9 +380,6 @@ CREATE TABLE public.data_release_forcedsources (
     psfflux_flag boolean,
     psfflux double precision
 );
-
-
--- ALTER TABLE public.data_release_forcedsources OWNER TO rubin;
 
 --
 -- TOC entry 219 (class 1259 OID 53265)
@@ -576,7 +445,6 @@ CREATE TABLE public.data_release_objects (
 );
 
 
--- ALTER TABLE public.data_release_objects OWNER TO rubin;
 
 --
 -- TOC entry 215 (class 1259 OID 53254)
@@ -606,7 +474,6 @@ CREATE SEQUENCE public.edc_logger_ai_pk
     CACHE 1;
 
 
--- ALTER TABLE public.edc_logger_ai_pk OWNER TO rubin;
 
 --
 -- TOC entry 221 (class 1259 OID 55167)
@@ -623,9 +490,6 @@ CREATE TABLE public.edc_logger (
     date_created timestamp with time zone DEFAULT now() NOT NULL
 );
 
-
--- ALTER TABLE public.edc_logger OWNER TO rubin;
-
 --
 -- TOC entry 226 (class 1259 OID 194887)
 -- Name: json_testing; Type: TABLE; Schema: public; Owner: rubin
@@ -636,8 +500,6 @@ CREATE TABLE public.json_testing (
     some_json jsonb
 );
 
-
--- ALTER TABLE public.json_testing OWNER TO rubin;
 
 --
 -- TOC entry 225 (class 1259 OID 194885)
@@ -650,9 +512,6 @@ CREATE SEQUENCE public.json_testing_id_seq
     NO MINVALUE
     NO MAXVALUE
     CACHE 1;
-
-
--- ALTER TABLE public.json_testing_id_seq OWNER TO rubin;
 
 --
 -- TOC entry 3755 (class 0 OID 0)
@@ -856,264 +715,4 @@ ALTER TABLE ONLY public.citizen_science_audit
     ADD CONSTRAINT fk_owner_id FOREIGN KEY (cit_sci_owner_id) REFERENCES public.citizen_science_owners(cit_sci_owner_id) ON DELETE CASCADE;
 
 
---
--- TOC entry 3727 (class 0 OID 0)
--- Dependencies: 5
--- Name: SCHEMA public; Type: ACL; Schema: -; Owner: cloudsqlsuperuser
---
-
--- REVOKE USAGE ON SCHEMA public FROM PUBLIC;
--- GRANT ALL ON SCHEMA public TO PUBLIC;
--- GRANT ALL ON SCHEMA public TO astro_objects;
--- GRANT ALL ON SCHEMA public TO rubin;
-
-
--- --
--- -- TOC entry 3728 (class 0 OID 0)
--- -- Dependencies: 213
--- -- Name: TABLE alert_query_store; Type: ACL; Schema: public; Owner: rubin
--- --
-
--- GRANT ALL ON TABLE public.alert_query_store TO astro_objects;
-
-
--- --
--- -- TOC entry 3730 (class 0 OID 0)
--- -- Dependencies: 212
--- -- Name: SEQUENCE alert_query_store_edc_alert_query_id_seq; Type: ACL; Schema: public; Owner: rubin
--- --
-
--- GRANT ALL ON SEQUENCE public.alert_query_store_edc_alert_query_id_seq TO astro_objects;
-
-
--- --
--- -- TOC entry 3731 (class 0 OID 0)
--- -- Dependencies: 211
--- -- Name: TABLE alert_stream_payloads; Type: ACL; Schema: public; Owner: rubin
--- --
-
--- GRANT ALL ON TABLE public.alert_stream_payloads TO astro_objects;
-
-
--- --
--- -- TOC entry 3733 (class 0 OID 0)
--- -- Dependencies: 210
--- -- Name: SEQUENCE alert_stream_payloads_edc_alert_stream_id_seq; Type: ACL; Schema: public; Owner: rubin
--- --
-
--- GRANT ALL ON SEQUENCE public.alert_stream_payloads_edc_alert_stream_id_seq TO astro_objects;
-
-
--- --
--- -- TOC entry 3734 (class 0 OID 0)
--- -- Dependencies: 200
--- -- Name: TABLE astro_objects; Type: ACL; Schema: public; Owner: rubin
--- --
-
--- GRANT ALL ON TABLE public.astro_objects TO astro_objects;
-
-
--- --
--- -- TOC entry 3735 (class 0 OID 0)
--- -- Dependencies: 224
--- -- Name: SEQUENCE cit_sci_audit_pk; Type: ACL; Schema: public; Owner: rubin
--- --
-
--- GRANT SELECT,USAGE ON SEQUENCE public.cit_sci_audit_pk TO astro_objects;
-
-
--- --
--- -- TOC entry 3736 (class 0 OID 0)
--- -- Dependencies: 223
--- -- Name: TABLE citizen_science_audit; Type: ACL; Schema: public; Owner: rubin
--- --
-
--- GRANT ALL ON TABLE public.citizen_science_audit TO astro_objects;
-
-
--- --
--- -- TOC entry 3737 (class 0 OID 0)
--- -- Dependencies: 208
--- -- Name: TABLE citizen_science_batches; Type: ACL; Schema: public; Owner: rubin
--- --
-
--- GRANT ALL ON TABLE public.citizen_science_batches TO astro_objects;
-
-
--- --
--- -- TOC entry 3738 (class 0 OID 0)
--- -- Dependencies: 209
--- -- Name: SEQUENCE citizen_science_batches_cit_sci_batch_id_seq; Type: ACL; Schema: public; Owner: rubin
--- --
-
--- GRANT ALL ON SEQUENCE public.citizen_science_batches_cit_sci_batch_id_seq TO astro_objects;
-
-
--- --
--- -- TOC entry 3739 (class 0 OID 0)
--- -- Dependencies: 201
--- -- Name: TABLE citizen_science_meta; Type: ACL; Schema: public; Owner: rubin
--- --
-
--- GRANT ALL ON TABLE public.citizen_science_meta TO astro_objects;
-
-
--- --
--- -- TOC entry 3740 (class 0 OID 0)
--- -- Dependencies: 202
--- -- Name: SEQUENCE citizen_science_meta_cit_sci_meta_id_seq; Type: ACL; Schema: public; Owner: rubin
--- --
-
--- GRANT ALL ON SEQUENCE public.citizen_science_meta_cit_sci_meta_id_seq TO astro_objects;
-
-
--- --
--- -- TOC entry 3741 (class 0 OID 0)
--- -- Dependencies: 203
--- -- Name: TABLE citizen_science_owners; Type: ACL; Schema: public; Owner: rubin
--- --
-
--- GRANT ALL ON TABLE public.citizen_science_owners TO astro_objects;
-
-
--- --
--- -- TOC entry 3742 (class 0 OID 0)
--- -- Dependencies: 204
--- -- Name: SEQUENCE citizen_science_owners_cit_sci_owner_id_seq; Type: ACL; Schema: public; Owner: rubin
--- --
-
--- GRANT ALL ON SEQUENCE public.citizen_science_owners_cit_sci_owner_id_seq TO astro_objects;
-
-
--- --
--- -- TOC entry 3743 (class 0 OID 0)
--- -- Dependencies: 207
--- -- Name: TABLE citizen_science_proj_meta_lookup; Type: ACL; Schema: public; Owner: rubin
--- --
-
--- GRANT ALL ON TABLE public.citizen_science_proj_meta_lookup TO astro_objects;
-
-
--- --
--- -- TOC entry 3744 (class 0 OID 0)
--- -- Dependencies: 214
--- -- Name: SEQUENCE citizen_science_proj_meta_lookup_cit_sci_lookup_id_seq; Type: ACL; Schema: public; Owner: rubin
--- --
-
--- GRANT ALL ON SEQUENCE public.citizen_science_proj_meta_lookup_cit_sci_lookup_id_seq TO astro_objects;
-
-
--- --
--- -- TOC entry 3745 (class 0 OID 0)
--- -- Dependencies: 205
--- -- Name: TABLE citizen_science_projects; Type: ACL; Schema: public; Owner: rubin
--- --
-
--- GRANT ALL ON TABLE public.citizen_science_projects TO astro_objects;
-
-
--- --
--- -- TOC entry 3746 (class 0 OID 0)
--- -- Dependencies: 206
--- -- Name: SEQUENCE citizen_science_projects_cit_sci_proj_id_seq; Type: ACL; Schema: public; Owner: rubin
--- --
-
--- GRANT ALL ON SEQUENCE public.citizen_science_projects_cit_sci_proj_id_seq TO astro_objects;
-
-
--- --
--- -- TOC entry 3747 (class 0 OID 0)
--- -- Dependencies: 218
--- -- Name: TABLE data_release_diaobjects; Type: ACL; Schema: public; Owner: rubin
--- --
-
--- GRANT ALL ON TABLE public.data_release_diaobjects TO astro_objects;
-
-
--- --
--- -- TOC entry 3748 (class 0 OID 0)
--- -- Dependencies: 217
--- -- Name: SEQUENCE data_release_diaobjects_edc_diaobj_ver_id_seq; Type: ACL; Schema: public; Owner: rubin
--- --
-
--- GRANT ALL ON SEQUENCE public.data_release_diaobjects_edc_diaobj_ver_id_seq TO astro_objects;
-
-
--- --
--- -- TOC entry 3749 (class 0 OID 0)
--- -- Dependencies: 220
--- -- Name: TABLE data_release_forcedsources; Type: ACL; Schema: public; Owner: rubin
--- --
-
--- GRANT ALL ON TABLE public.data_release_forcedsources TO astro_objects;
-
-
--- --
--- -- TOC entry 3750 (class 0 OID 0)
--- -- Dependencies: 219
--- -- Name: SEQUENCE data_release_forcedsource_edc_forcedsource_ver_id_seq; Type: ACL; Schema: public; Owner: rubin
--- --
-
--- GRANT ALL ON SEQUENCE public.data_release_forcedsource_edc_forcedsource_ver_id_seq TO astro_objects;
-
-
--- --
--- -- TOC entry 3751 (class 0 OID 0)
--- -- Dependencies: 216
--- -- Name: TABLE data_release_objects; Type: ACL; Schema: public; Owner: rubin
--- --
-
--- GRANT ALL ON TABLE public.data_release_objects TO astro_objects;
-
-
--- --
--- -- TOC entry 3752 (class 0 OID 0)
--- -- Dependencies: 215
--- -- Name: SEQUENCE data_release_objects_edc_obj_ver_id_seq; Type: ACL; Schema: public; Owner: rubin
--- --
-
--- GRANT ALL ON SEQUENCE public.data_release_objects_edc_obj_ver_id_seq TO astro_objects;
-
-
--- --
--- -- TOC entry 3753 (class 0 OID 0)
--- -- Dependencies: 222
--- -- Name: SEQUENCE edc_logger_ai_pk; Type: ACL; Schema: public; Owner: rubin
--- --
-
--- GRANT ALL ON SEQUENCE public.edc_logger_ai_pk TO astro_objects;
-
-
--- --
--- -- TOC entry 3754 (class 0 OID 0)
--- -- Dependencies: 221
--- -- Name: TABLE edc_logger; Type: ACL; Schema: public; Owner: rubin
--- --
-
--- GRANT ALL ON TABLE public.edc_logger TO astro_objects;
-
-
--- --
--- -- TOC entry 1806 (class 826 OID 113488)
--- -- Name: DEFAULT PRIVILEGES FOR SEQUENCES; Type: DEFAULT ACL; Schema: public; Owner: superset
--- --
-
--- ALTER DEFAULT PRIVILEGES FOR ROLE superset IN SCHEMA public GRANT ALL ON SEQUENCES  TO superset;
--- ALTER DEFAULT PRIVILEGES FOR ROLE superset IN SCHEMA public GRANT ALL ON SEQUENCES  TO astro_objects;
-
-
--- --
--- -- TOC entry 1807 (class 826 OID 113465)
--- -- Name: DEFAULT PRIVILEGES FOR TABLES; Type: DEFAULT ACL; Schema: public; Owner: superset
--- --
-
--- ALTER DEFAULT PRIVILEGES FOR ROLE superset IN SCHEMA public GRANT ALL ON TABLES  TO superset;
--- ALTER DEFAULT PRIVILEGES FOR ROLE superset IN SCHEMA public GRANT ALL ON TABLES  TO astro_objects;
-
-
--- -- Completed on 2024-01-10 15:11:38 MST
-
--- --
--- -- PostgreSQL database dump complete
--- --
 

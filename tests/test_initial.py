@@ -81,7 +81,7 @@ def test_check_meta_record_by_meta_id():
     meta_records = MetadataService.lookup_meta_record(None, None, meta_ids[0].cit_sci_meta_id)
     assert len(meta_records) == 1
 
-def test_check_meta_record_by_source_id():
+def test_check_meta_record_by_object_id():
     _EMAIL = "fake@email.az"
     _VENDOR_BATCH_ID = 33333
 
@@ -92,14 +92,14 @@ def test_check_meta_record_by_source_id():
     _URL = "http://some.fake.url/only/for/testing"
     _EDC_VER_ID = 123123123
     _PUBLIC = True
-    _SOURCE_ID = 321321321
-    _SOURCE_ID_TYPE = "objectId"
+    _OBJECT_ID = 321321321
+    _OBJECT_ID_TYPE = "DIRECT"
     _USER_DEFINED_VALUES = { "just_a" : "test" }
 
     main.validator.project_id = _PROJECT_ID
     main.validator.batch_id = _BATCH_ID
-    MetadataService.insert_meta_records([CitizenScienceMeta(edc_ver_id=_EDC_VER_ID, uri=_URL, public=_PUBLIC, source_id=_SOURCE_ID, source_id_type=_SOURCE_ID_TYPE, user_defined_values=str(_USER_DEFINED_VALUES))])
-    meta_record = MetadataService.lookup_meta_record(_SOURCE_ID, _SOURCE_ID_TYPE)
+    MetadataService.insert_meta_records([CitizenScienceMeta(edc_ver_id=_EDC_VER_ID, uri=_URL, public=_PUBLIC, object_id=_OBJECT_ID, object_id_type=_OBJECT_ID_TYPE, user_defined_values=str(_USER_DEFINED_VALUES))])
+    meta_record = MetadataService.lookup_meta_record(_OBJECT_ID, _OBJECT_ID_TYPE)
     assert meta_record > 1
 
 # Lookup record tests
