@@ -1,4 +1,4 @@
-import os, fnmatch, json, csv, shutil, time, threading, glob
+import os, fnmatch, json, time
 from google.cloud import logging
 
 TEST_ONLY = bool(os.environ.get('TEST_ONLY'))
@@ -13,12 +13,12 @@ logger = logging_client.logger(log_name)
 try:
     from .models.citizen_science.citizen_science_validator import CitizenScienceValidator
     from .models.data_exporter_response import DataExporterResponse
-    from .models.edc_logger import EdcLogger
+    # from .models.edc_logger import EdcLogger
 except:
     try:
         from models.citizen_science.citizen_science_validator import CitizenScienceValidator
         from models.data_exporter_response import DataExporterResponse
-        from models.edc_logger import EdcLogger
+        # from models.edc_logger import EdcLogger
     except Exception as e:
         if TEST_ONLY == True:
             logger.log_text("An error occurred while attempting to import subpackages!")
@@ -26,7 +26,6 @@ except:
 
 from flask import Flask, request
 from google.cloud import storage
-import numpy as np
 import services.audit_report as AuditReportService
 import services.manifest_file as ManifestFileService
 import services.owner as OwnerService
@@ -50,21 +49,14 @@ def check_test_only_var():
 
 @app.route("/active-batch-metadata")
 def get_batch_metadata():
-    logger.log_text("get_batch_metadata:: Inside of get_batch_metadata!!!!")
-
     vendor_project_id = request.args.get("vendor_project_id")
-    logger.log_text("get_batch_metadata:: vendor_project_id=" + str(vendor_project_id))
-
     project_id = lookup_project_record(vendor_project_id)
-    logger.log_text("get_batch_metadata:: project_id=" + str(project_id))
 
     # Clean up batches before fetching batch ID
     check_batch_status(project_id, vendor_project_id)
 
     # Fetch batch ID
     batch_id = BatchService.get_current_active_batch_id(project_id)
-    logger.log_text("get_batch_metadata:: batche_id = " + str(batch_id))
-
     manifest_url = ManifestFileService.lookup_manifest_url(batch_id)
 
     return json.dumps({
@@ -91,7 +83,6 @@ def check_status_of_previously_executed_ingest():
 
 @app.route("/citizen-science-tabular-ingest")
 def download_tabular_data_and_process():
-    logger.log_text("/citizen-science-tabular-ingest hit!")
     global response, validator, debug, urls
     guid = request.args.get("guid")
     email = request.args.get("email")
@@ -106,14 +97,9 @@ def download_tabular_data_and_process():
     time_mark(debug, __name__)
     validate_project_metadata(email, vendor_project_id, vendor_batch_id) 
 
-    logger.log_text("just validated project metadata")
     if validator.error is False:
-        logger.log_text("validator.error is False!")
-
         tabular_records = download_zip(CLOUD_STORAGE_BUCKET_HIPS2FITS , "manifest.csv", guid, validator.data_rights_approved, True)
-        logger.log_text("about to call upload_manifest()")
         manifest_url = ManifestFileService.upload_manifest("/tmp/" + guid + "/manifest.csv")
-        logger.log_text("done running upload_manifest()")
         # if data_format == "objects":
         #     logger.log_text("data_format == object, about to call create_dr_object_records")
         #     TabularDatService.create_dr_objects_records(csv_path)
@@ -129,12 +115,10 @@ def download_tabular_data_and_process():
         # updated_meta_records = update_meta_records_with_user_values(meta_records)
         tabular_meta_records = MetadataService.create_tabular_meta_records(tabular_records)
         meta_records_with_id = MetadataService.insert_meta_records(tabular_meta_records)
-        lookup_status = LookupService.insert_lookup_records(meta_records_with_id, validator.project_id, validator.batch_id)
-        logger.log_text("lookup_status: " + str(lookup_status))
+        LookupService.insert_lookup_records(meta_records_with_id, validator.project_id, validator.batch_id)
         response.status = "success"
         response.manifest_url = manifest_url
     else:
-        logger.log_text("validator.error is True!")
         response.status = "error"
         if response.messages == None or len(response.messages) == 0:
             response.messages.append("An error occurred while processing the data batch, please try again later.")
