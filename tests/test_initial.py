@@ -53,7 +53,7 @@ def test_check_batch_status():
     _OWNER_ID = main.create_new_owner_record(_EMAIL)
     _PROJECT_ID = main.create_new_project_record(_OWNER_ID, _VENDOR_BATCH_ID)
     main.create_new_batch(_PROJECT_ID, _VENDOR_BATCH_ID)
-    assert main.check_batch_status(_PROJECT_ID, _VENDOR_BATCH_ID)[0]["batch_record"]["batch_id"] == 2
+    assert main.check_batch_status(_PROJECT_ID, _VENDOR_BATCH_ID)[0]["batch_id"] == 2
 
 # Meta record tests
 def test_create_meta_record():
