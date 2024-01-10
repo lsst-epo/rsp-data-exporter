@@ -1,6 +1,6 @@
-import os
 from sqlalchemy import select
 from google.cloud import logging
+from . import db as DatabaseService
 
 try:
     from ..models.citizen_science.citizen_science_owners import CitizenScienceOwners
@@ -11,12 +11,6 @@ except:
         pass
 
 BAD_OWNER_STATUSES = ["BLOCKED", "DISABLED"]
-DB_USER = os.environ['DB_USER']
-DB_PASS = os.environ['DB_PASS']
-DB_NAME = os.environ['DB_NAME']
-DB_HOST = os.environ['DB_HOST']
-DB_PORT = os.environ['DB_PORT']
-
 logging_client = logging.Client()
 log_name = "rsp-data-exporter.owner_service"
 logger = logging_client.logger(log_name)
@@ -27,7 +21,7 @@ def create_new_owner_record(email):
 
     try:
         logger.log_text("about to insert new owner record")
-        db = CitizenScienceOwners.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        db = DatabaseService.get_db_connection()
         citizen_science_owner_record = CitizenScienceOwners(email=email, status='ACTIVE')
         db.add(citizen_science_owner_record)
         db.commit()
@@ -44,7 +38,7 @@ def lookup_owner_record(email):
     messages = []
 
     try:
-        db = CitizenScienceOwners.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        db = DatabaseService.get_db_connection()
         stmt = select(CitizenScienceOwners).where(CitizenScienceOwners.email == email)
 
         results = db.execute(stmt)

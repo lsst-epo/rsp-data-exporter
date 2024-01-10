@@ -1,7 +1,6 @@
-from sqlalchemy.orm import declarative_base, sessionmaker
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean
+from sqlalchemy.orm import declarative_base
+from sqlalchemy import Column, Integer, String, DateTime, Boolean
 from sqlalchemy.sql import func
-import sqlalchemy
 
 Base = declarative_base()
 
@@ -17,9 +16,3 @@ class CitizenScienceProjects(Base):
     date_created = Column(DateTime, server_default=func.now())
     date_completed = Column(DateTime)
     data_rights_approved = Column(Boolean)
-
-    def get_db_connection(db_host, db_port, db_name, db_user, db_pass):
-            engine = sqlalchemy.create_engine("postgresql://{}:{}@{}:{}/{}".format(db_user, db_pass, db_host, db_port, db_name))
-            engine.dialect.description_encoding = None
-            Session = sessionmaker(bind=engine)
-            return Session()

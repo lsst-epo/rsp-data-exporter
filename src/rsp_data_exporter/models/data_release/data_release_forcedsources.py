@@ -1,5 +1,5 @@
-from sqlalchemy.orm import declarative_base, sessionmaker
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, BigInteger
+from sqlalchemy.orm import declarative_base
+from sqlalchemy import Column, Integer, String, Boolean, BigInteger
 from sqlalchemy.dialects.postgresql import DOUBLE_PRECISION
 import sqlalchemy
 
@@ -49,9 +49,3 @@ class DataReleaseForcedSources(Base):
     psffluxerr = Column(DOUBLE_PRECISION)
     psfflux_flag = Column(Boolean)
     psfflux = Column(DOUBLE_PRECISION)
-
-    def get_db_connection(db_host, db_port, db_name, db_user, db_pass):
-        engine = sqlalchemy.create_engine("postgresql://{}:{}@{}:{}/{}".format(db_user, db_pass, db_host, db_port, db_name))
-        engine.dialect.description_encoding = None
-        Session = sessionmaker(bind=engine)
-        return Session()

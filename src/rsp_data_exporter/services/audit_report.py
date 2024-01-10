@@ -1,8 +1,7 @@
-import os
-import sqlalchemy
 from sqlalchemy import select, func
 from google.cloud import logging
 from panoptes_client import Project
+from . import db as DatabaseService
 
 logging_client = logging.Client()
 log_name = "rsp-data-exporter.audit_service"
@@ -16,15 +15,9 @@ except:
     except:
         pass
 
-DB_USER = os.environ['DB_USER']
-DB_PASS = os.environ['DB_PASS']
-DB_NAME = os.environ['DB_NAME']
-DB_HOST = os.environ['DB_HOST']
-DB_PORT = os.environ['DB_PORT']
-
 def fetch_audit_records(vendor_project_id):
     try:
-        db = CitizenScienceAudit.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        db = DatabaseService.get_db_connection()
         stmt = select(CitizenScienceAudit.object_id).where(CitizenScienceAudit.vendor_project_id == int(vendor_project_id))
         results = db.execute(stmt)
         db.close()
@@ -39,15 +32,9 @@ def fetch_audit_records(vendor_project_id):
     return str(audit_response)
 
 def insert_audit_records(vendor_project_id, mapped_manifest, owner_id):
-    # # logger.log_text("##################################################################")
-    # logger.log_text("Inside of insert audit record!! Mapped manifest: ")
-    # logger.log_text(str(mapped_manifest))
     audit_records = []
     object_ids = []
     for key in mapped_manifest:
-        # logger.log_text("##################################################################")
-        # logger.log_text("In mapped_manifest loop, loigging mapped_manifes[key]: ")
-        # logger.log_text(str(mapped_manifest[key]))
         if "objectId" in mapped_manifest[key]:
 
             object_id = mapped_manifest[key]["objectId"]
@@ -56,7 +43,7 @@ def insert_audit_records(vendor_project_id, mapped_manifest, owner_id):
 
         if len(audit_records) > 0:
             try:
-                db = CitizenScienceAudit.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+                db = DatabaseService.get_db_connection()
                 db.expire_on_commit = False
                 db.bulk_save_objects(audit_records, return_defaults=True)
                 db.commit()
@@ -78,7 +65,7 @@ def insert_audit_records(vendor_project_id, mapped_manifest, owner_id):
 def audit_object_ids(object_ids, vendor_project_id):
     logger.log_text("about to audit object IDs!")
     try:
-        db = CitizenScienceAudit.get_db_connection(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS)
+        db = DatabaseService.get_db_connection()
         stmt = select([CitizenScienceAudit.vendor_project_id, func.count(CitizenScienceAudit.object_id)]).where(CitizenScienceAudit.object_id.in_(object_ids)).group_by(CitizenScienceAudit.vendor_project_id).filter(CitizenScienceAudit.vendor_project_id != int(vendor_project_id))
         results = db.execute(stmt).fetchall() 
         logger.log_text("done querying for object ID matches!")
