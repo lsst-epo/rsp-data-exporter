@@ -34,12 +34,12 @@ import services.project as ProjectService
 import services.batch as BatchService
 import services.metadata as MetadataService
 import services.lookup as LookupService
-import services.tabular_data as TabularDataService
+import services.file as FileService
+# import services.tabular_data as TabularDataService
 
 app = Flask(__name__)
 response = DataExporterResponse()
 validator = CitizenScienceValidator()
-CLOUD_STORAGE_BUCKET = os.environ['CLOUD_STORAGE_BUCKET']
 CLOUD_STORAGE_BUCKET_HIPS2FITS = os.environ['CLOUD_STORAGE_BUCKET_HIPS2FITS']
 CLOUD_STORAGE_CIT_SCI_URL_PREFIX = os.environ["CLOUD_STORAGE_CIT_SCI_URL_PREFIX"]
 CLOUD_STORAGE_CIT_SCI_PUBLIC = os.environ["CLOUD_STORAGE_CIT_SCI_PUBLIC"]
@@ -70,9 +70,6 @@ def get_batch_metadata():
     return json.dumps({
         "metadata_url": manifest_url
     })
-
-def query_lookup_records(project_id, batch_id):
-    return LookupService.query_lookup_records(project_id, batch_id)
 
 @app.route("/citizen-science-ingest-status")
 def check_status_of_previously_executed_ingest():
@@ -113,26 +110,26 @@ def download_tabular_data_and_process():
     if validator.error is False:
         logger.log_text("validator.error is False!")
 
-        tabular_records = download_zip(CLOUD_STORAGE_BUCKET_HIPS2FITS , "manifest.csv", guid, True)
+        tabular_records = download_zip(CLOUD_STORAGE_BUCKET_HIPS2FITS , "manifest.csv", guid, validator.data_rights_approved, True)
         logger.log_text("about to call upload_manifest()")
-        manifest_url = upload_manifest("/tmp/" + guid + "/manifest.csv")
+        manifest_url = ManifestFileService.upload_manifest("/tmp/" + guid + "/manifest.csv")
         logger.log_text("done running upload_manifest()")
         # if data_format == "objects":
         #     logger.log_text("data_format == object, about to call create_dr_object_records")
-        #     create_dr_objects_records(csv_path)
+        #     TabularDatService.create_dr_objects_records(csv_path)
         # elif data_format == "diaobjects":
         #     logger.log_text("data_format == object, about to call create_dr_diaobject_records")
-        #     create_dr_diaobject_records(csv_path)
+        #     TabularDatService.create_dr_diaobject_records(csv_path)
         # elif data_format == "forcedsources":
         #     logger.log_text("data_format == object, about to call create_dr_forcedsource_records")
-        #     create_dr_forcedsource_records(csv_path)
+        #     TabularDatService.create_dr_forcedsource_records(csv_path)
         # else:
         #     logger.log_text("data_format != object!!!")
         # manifest_url = transfer_tabular_manifest(urls, CLOUD_STORAGE_CIT_SCI_PUBLIC, guid)
         # updated_meta_records = update_meta_records_with_user_values(meta_records)
-        tabular_meta_records = create_tabular_meta_records(tabular_records)
-        meta_records_with_id = insert_meta_records(tabular_meta_records)
-        lookup_status = insert_lookup_records(meta_records_with_id, validator.project_id, validator.batch_id)
+        tabular_meta_records = MetadataService.create_tabular_meta_records(tabular_records)
+        meta_records_with_id = MetadataService.insert_meta_records(tabular_meta_records)
+        lookup_status = LookupService.insert_lookup_records(meta_records_with_id, validator.project_id, validator.batch_id)
         logger.log_text("lookup_status: " + str(lookup_status))
         response.status = "success"
         response.manifest_url = manifest_url
@@ -160,6 +157,9 @@ def download_image_data_and_process():
     validator = CitizenScienceValidator()
     urls = []
 
+    logger.log_text("guid: ")
+    logger.log_text(guid)
+
     time_mark(debug, __name__)
 
     validate_project_metadata(email, vendor_project_id, vendor_batch_id) 
@@ -169,16 +169,19 @@ def download_image_data_and_process():
         logger.log_text("validator.error is False!")
     
         # astro cutouts data
-        cutouts = download_zip(CLOUD_STORAGE_BUCKET_HIPS2FITS, guid + ".zip", guid)
+        logger.log_text("about to log CLOUD_STORAGE_BUCKET_HIPS2FITS before calling download_zip:")
+        logger.log_text(CLOUD_STORAGE_BUCKET_HIPS2FITS);
+        cutouts = download_zip(CLOUD_STORAGE_BUCKET_HIPS2FITS, guid + ".zip", guid, validator.data_rights_approved)
 
         if validator.error is False:
-            urls, meta_records = upload_cutouts(cutouts, vendor_project_id)
+            urls = upload_cutouts(cutouts)
+            meta_records = MetadataService.create_meta_records(urls)
 
             if validator.error is False:                
                 manifest_url = build_and_upload_manifest(urls, CLOUD_STORAGE_CIT_SCI_PUBLIC, guid)
                 updated_meta_records = update_meta_records_with_user_values(meta_records)
-                meta_records_with_id = insert_meta_records(updated_meta_records)
-                lookup_status = insert_lookup_records(meta_records_with_id, validator.project_id, validator.batch_id)
+                meta_records_with_id = MetadataService.insert_meta_records(updated_meta_records)
+                lookup_status = LookupService.insert_lookup_records(meta_records_with_id, validator.project_id, validator.batch_id)
                 logger.log_text("lookup_status: " + str(lookup_status))
                 response.status = "success"
                 response.manifest_url = manifest_url
@@ -227,173 +230,29 @@ def insert_audit_records(vendor_project_id):
         response.messages.append("An error occurred while looking up the audit records associated with Zooniverse project ID: " + vendor_project_id)
         return json.dumps(response.__dict__)
 
-def update_batch_record_with_manifest_url(manifest_url_p):
-    return ManifestFileService.update_batch_record_with_manifest_url(manifest_url_p, validator.batch_id)
-
-def create_tabular_meta_records(tabular_records):
-    return MetadataService.create_tabular_meta_records(tabular_records)
-
 def update_meta_records_with_user_values(meta_records):
     user_defined_values, info_message = ManifestFileService.update_meta_records_with_user_values(meta_records, validator.mapped_manifest)
     if info_message != "":
         response.messages.append(info_message)
     return user_defined_values
 
-def upload_manifest(csv_path):
-    logger.log_text("inside of upload_manifest")
-    gcs = storage.Client()
-    bucket = gcs.bucket(CLOUD_STORAGE_CIT_SCI_PUBLIC)
-    destination_filename = csv_path.replace("/tmp/", "")
-    blob = bucket.blob(destination_filename)
-    blob.upload_from_filename(csv_path)
-
-    logger.log_text("logging blob.public_url:")
-    logger.log_text(blob.public_url)
-    return blob.public_url
-
-def create_dr_forcedsource_records(csv_path):
-    return TabularDataService.create_dr_forcedsource_records(csv_path)
-
-def create_dr_diaobject_records(csv_path):
-    return TabularDataService.create_dr_diaobject_records(csv_path)
-
-def create_dr_objects_records(csv_path):
-    return TabularDataService.create_dr_objects_records(csv_path)
-
-def upload_cutouts(cutouts, vendor_project_id):
+def upload_cutouts(cutouts):
     global debug
-
-    # Beginning of optimization code
     time_mark(debug, "Start of upload...")
-    if len(cutouts) > 500: # Arbitrary threshold for threading
-        subset_count = round(len(np.array(cutouts)) / 250)
-        sub_cutouts_arr = np.split(np.array(cutouts), subset_count) # create sub arrays divided by 1k cutouts
-        threads = []
-        for i, sub_arr in enumerate(sub_cutouts_arr):
-            t = threading.Thread(target=upload_cutout_arr, args=(sub_arr,str(i),))
-            threads.append(t)
-            threads[i].start()
-        
-        for thread in threads:
-            logger.log_text("joining thread!")
-            thread.join()
-
-    else:
-        urls = upload_cutout_arr(cutouts, str(1))
+    urls = FileService.upload_cutouts(cutouts)
     time_mark(debug, "End of upload...")
-
-    time_mark(debug, "Start of upload & inserting of metadata...")
-    meta_records = create_meta_records(urls)
-    time_mark(debug, "End of inserting of metadata records")
-    return urls, meta_records
- 
-def upload_cutout_arr(cutouts, i):
-    urls = []
-    gcs = storage.Client()
-    bucket = gcs.bucket(CLOUD_STORAGE_CIT_SCI_PUBLIC)
-
-    already_logged = False
-
-    for cutout in cutouts:
-        if already_logged == False:
-            logger.log_text(cutout)
-            already_logged = True
-        destination_filename = cutout.replace("/tmp/", "")
-        blob = bucket.blob(destination_filename)
-        
-        blob.upload_from_filename(cutout)
-        urls.append(blob.public_url)
-
-    logger.log_text("finished uploading thread #" + i)
-
     return urls
-        
-def create_meta_records(urls):
-    return MetadataService.create_meta_records(urls)
 
-def insert_meta_records(meta_records):
-    return MetadataService.insert_meta_records(meta_records)
-
-def download_zip(bucket_name, filename, guid, is_tabular_dataset = False):
-    global response, validator, db, debug
+def download_zip(bucket_name, filename, guid, data_rights_approved, is_tabular_dataset = False):
+    global validator
     time_mark(debug, "Start of download zip")
-    # Create a Cloud Storage client.
-    gcs = storage.Client()
-    os.makedirs("/tmp/" + guid + "/", exist_ok=True)
-    if is_tabular_dataset == True:
-        filename = guid + "/" + filename
-
-    logger.log_text("about to log bucket download name:")
-    logger.log_text(bucket_name)
-
-    bucket = gcs.bucket(bucket_name)
-
-    # Download the file to /tmp storage
-    logger.log_text("filename to download: " + filename)
-    blob = bucket.blob(filename)
-    zipped_cutouts = "/tmp/" + filename
-    time_mark(debug, "Start of download...")
-    blob.download_to_filename(zipped_cutouts)
-    time_mark(debug, "Download finished...")
-
-    unzipped_cutouts_dir = "/tmp/" + guid
-    # os.mkdir(unzipped_cutouts_dir)
-
-    # Deviate logic based on data type
-    if is_tabular_dataset == True:
-        files = os.listdir(unzipped_cutouts_dir)
-        csv_path = unzipped_cutouts_dir + "/" + files[0]
-        logger.log_text("inside of TABULAR_DATA code block")
-        # Get CSV file
-        csv_file = open(csv_path, "rU")
-        reader = csv.reader(csv_file, delimiter=',')
-
-        logger.log_text("about to log CSV file contents")
-        tabular_records = []
-        for row in reader:
-            logger.log_text(str(row))
-            tabular_records.append(row)
-        logger.log_text("done logging CSV file contents")
-
-        return tabular_records
-    else:
-        time_mark(debug, "Start of unzip....")
-        # logger.log_text("rosas - about to log the /tmp directory contents")
-        # rosas_test = str(glob.glob("/tmp/*"))
-        # logger.log_text(rosas_test)
-
-        shutil.unpack_archive(zipped_cutouts, unzipped_cutouts_dir, "zip")
-        time_mark(debug, "Unzip finished...")
-
-        # Count the number of objects and remove any files more than the allotted amount based on
-        # the RSP user's data rights approval status
-        time_mark(debug, "Start of dir count...")
-        files = os.listdir(unzipped_cutouts_dir)
-        time_mark(debug, "Dir count finished...")
-
-        max_objects_count = 100
-        if validator.data_rights_approved == True:
-            max_objects_count = 10000
-        else:
-            response.messages.append("Your project has not been approved by the data rights panel as of yet, as such you will not be able to send any additional data to Zooniverse until your project is approved.")
-
-        logger.log_text("Data is NOT in tabular format")
-        if len(files) > max_objects_count:
-            response.messages.append("Currently, a maximum of " + str(max_objects_count) + " objects is allowed per batch for your project - your batch of size " + str(len(files)) + " has been has been truncated and anything in excess of " + str(max_objects_count) + " objects has been removed.")
-            time_mark(debug, "Start of truncating excess files")
-            for f_file in files[(max_objects_count + 1):]:
-                # response.messages.append("Removing file : " + unzipped_cutouts_dir + "/" + f_file)
-                os.remove(unzipped_cutouts_dir + "/" + f_file)
-            time_mark(debug, "Truncating finished...")
-
-        # Now, limit the files sent to image files
-        time_mark(debug, "Start of grabbing all the cutouts for return...")
-        pngs = glob.glob("/tmp/" + guid + "/*.png")
-        jpegs = glob.glob("/tmp/" + guid + "/*.jpeg")
-        jpgs = glob.glob("/tmp/" + guid + "/*.jpg")
-        cutouts = pngs + jpegs + jpgs
-        time_mark(debug, "Grabbing cutouts finished...")
-        return cutouts
+    cutouts, messages = FileService.download_zip(bucket_name, filename, guid, data_rights_approved, is_tabular_dataset)
+    time_mark(debug, "Grabbing cutouts finished...")
+    if len(messages) > 0:
+        validator.error = True
+        response.status = "error"
+        response.messages.append(messages)
+    return cutouts
 
 def transfer_tabular_manifest(bucket, guid):
     global debug, validator
@@ -408,7 +267,7 @@ def transfer_tabular_manifest(bucket, guid):
     manifestBlob = bucket.blob(guid + "/manifest.csv")
     logger.log_text("about to upload the new manifest to GCS")
     manifestBlob.upload_from_filename("/tmp/" + guid + "/manifest.csv")
-    update_batch_record_with_manifest_url(manifestBlob.public_url)
+    ManifestFileService.update_batch_record_with_manifest_url(manifestBlob.public_url)
     return manifestBlob.public_url
 
 def build_and_upload_manifest(urls, bucket, guid = ""):
@@ -544,12 +403,6 @@ def lookup_owner_record(email):
         response.status = "error"
         response.messages.append(messages)
     return owner_id
-
-def lookup_meta_record(object_id, object_id_type, meta_id = None):
-    return MetadataService.lookup_meta_record(object_id, object_id_type, meta_id)
-
-def insert_lookup_records(meta_records, project_id, batch_id):
-    return LookupService.insert_lookup_records(meta_records, project_id, batch_id)
 
 def locate(pattern, root_path):
     for path, files in os.walk(os.path.abspath(root_path)):

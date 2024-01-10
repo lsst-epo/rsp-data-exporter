@@ -209,3 +209,15 @@ def build_and_upload_manifest(urls, bucket, batch_id, guid = ""):
     manifestBlob.upload_from_filename("/tmp/" + guid + "/manifest.csv")
     update_batch_record_with_manifest_url(manifestBlob.public_url, batch_id)
     return manifestBlob.public_url, cutout_metadata
+
+def upload_manifest(csv_path):
+    logger.log_text("inside of upload_manifest")
+    gcs = storage.Client()
+    bucket = gcs.bucket(CLOUD_STORAGE_CIT_SCI_PUBLIC)
+    destination_filename = csv_path.replace("/tmp/", "")
+    blob = bucket.blob(destination_filename)
+    blob.upload_from_filename(csv_path)
+
+    logger.log_text("logging blob.public_url:")
+    logger.log_text(blob.public_url)
+    return blob.public_url
