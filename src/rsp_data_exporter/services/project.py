@@ -71,4 +71,4 @@ def create_new_project_record(owner_id, vendor_project_id):
         logger.log_text(e.__str__())
 
     logger.log_text("about to return from create_new_project_record")
-    return project_id
+    return project_id, messages
