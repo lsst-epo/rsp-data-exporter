@@ -63,13 +63,10 @@ def insert_audit_records(vendor_project_id, mapped_manifest, owner_id):
     return audit_records, audit_messages
 
 def audit_object_ids(object_ids, vendor_project_id):
-    logger.log_text("about to audit object IDs!")
     try:
         db = DatabaseService.get_db_connection()
         stmt = select([CitizenScienceAudit.vendor_project_id, func.count(CitizenScienceAudit.object_id)]).where(CitizenScienceAudit.object_id.in_(object_ids)).group_by(CitizenScienceAudit.vendor_project_id).filter(CitizenScienceAudit.vendor_project_id != int(vendor_project_id))
         results = db.execute(stmt).fetchall() 
-        logger.log_text("done querying for object ID matches!")
-        logger.log_text(str(results))
     except Exception as e:
         logger.log_text("an exception occurred in audit_object_ids")
         logger.log_text(e.__str__())
@@ -77,32 +74,21 @@ def audit_object_ids(object_ids, vendor_project_id):
 
     audit_aggr = []
     for row in results:
-        logger.log_text("looping through results!")
         audit_aggr.append([row[0], row[1]])
     
-    logger.log_text("about to close DB!")
     db.close()
-
-    logger.log_text("about to log audit_aggr:")
-    logger.log_text(str(audit_aggr))
-
     audit_response = []
     for row in audit_aggr:
         vendor_project_name, vendor_project_start_date, workflow_info, subjects_count = get_vendor_project_details(row[0])
-        logger.log_text("about to check if vendor_project_name is not None")
         if vendor_project_name is not None:
-            logger.log_text("vendor project ID is NOT none!")
             max_obj_id_count = len(object_ids)
             if subjects_count > len(object_ids):
                 max_obj_id_count = subjects_count
             perc_match = float(row[1]) / max_obj_id_count
-            audit_response.append("The dataset you curated has a " + str(perc_match) + " object ID match on another Zooniverse project: " + vendor_project_name + ", which was started on " + vendor_project_start_date + ". " + workflow_info)
-        else:
-            logger.log_text("vendor project name IS none!")
+            audit_response.append(f"The dataset you curated has a {str(perc_match)} object ID match on another Zooniverse project: {vendor_project_name}, which was started on {vendor_project_start_date}. {workflow_info}")
     return audit_response
 
 def get_vendor_project_details(vendor_project_id):
-    logger.log_text("about to lookup project name in get_vendor_project_details")
     try:
         project = Project.find(id=vendor_project_id)
         project_name = project.raw["display_name"]
@@ -112,7 +98,7 @@ def get_vendor_project_details(vendor_project_id):
         workflow_info = []
         for idx, workflow in enumerate(project.links.workflows):
             workflow_num = idx + 1
-            workflow_info.append("Workflow #" + str(workflow_num) + " : " + str(workflow.subjects_count) + " subjects; " + str(workflow.completeness) + " complete. ")
+            workflow_info.append(f"Workflow #{str(workflow_num)} : {str(workflow.subjects_count)} subjects; {str(workflow.completeness)} complete. ")
 
         workflow_output = "No workflows associated with this project."
         if len(workflow_info) > 0:
