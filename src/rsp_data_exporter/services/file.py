@@ -12,9 +12,9 @@ CLOUD_STORAGE_CIT_SCI_PUBLIC = os.environ["CLOUD_STORAGE_CIT_SCI_PUBLIC"]
 def download_zip(bucket_name, filename, guid, data_rights_approved, is_tabular_dataset = False):
     messages = []
     gcs = storage.Client()
-    os.makedirs("/tmp/" + guid + "/", exist_ok=True)
+    os.makedirs(f"/tmp/{guid}/", exist_ok=True)
     if is_tabular_dataset == True:
-        filename = guid + "/" + filename
+        filename = f"{guid}/{filename}"
 
     logger.log_text("about to log bucket download name:")
     logger.log_text(bucket_name)
@@ -24,15 +24,15 @@ def download_zip(bucket_name, filename, guid, data_rights_approved, is_tabular_d
     # Download the file to /tmp storage
     logger.log_text("filename to download: " + filename)
     blob = bucket.blob(filename)
-    zipped_cutouts = "/tmp/" + filename
+    zipped_cutouts = f"/tmp/{filename}"
     blob.download_to_filename(zipped_cutouts)
 
-    unzipped_cutouts_dir = "/tmp/" + guid
+    unzipped_cutouts_dir = f"/tmp/{guid}"
 
     # Deviate logic based on data type
     if is_tabular_dataset == True:
         files = os.listdir(unzipped_cutouts_dir)
-        csv_path = unzipped_cutouts_dir + "/" + files[0]
+        csv_path = f"{unzipped_cutouts_dir}/{files[0]}"
         logger.log_text("inside of TABULAR_DATA code block")
         # Get CSV file
         csv_file = open(csv_path, "rU")
@@ -61,14 +61,14 @@ def download_zip(bucket_name, filename, guid, data_rights_approved, is_tabular_d
 
         logger.log_text("Data is NOT in tabular format")
         if len(files) > max_objects_count:
-            messages.append("Currently, a maximum of " + str(max_objects_count) + " objects is allowed per batch for your project - your batch of size " + str(len(files)) + " has been has been truncated and anything in excess of " + str(max_objects_count) + " objects has been removed.")
+            messages.append(f"Currently, a maximum of {str(max_objects_count)} objects is allowed per batch for your project - your batch of size {str(len(files))} has been has been truncated and anything in excess of {str(max_objects_count)} objects has been removed.")
             for f_file in files[(max_objects_count + 1):]:
-                os.remove(unzipped_cutouts_dir + "/" + f_file)
+                os.remove(f"{unzipped_cutouts_dir}/{f_file}")
 
         # Now, limit the files sent to image files
-        pngs = glob.glob("/tmp/" + guid + "/*.png")
-        jpegs = glob.glob("/tmp/" + guid + "/*.jpeg")
-        jpgs = glob.glob("/tmp/" + guid + "/*.jpg")
+        pngs = glob.glob(f"/tmp/{guid}/*.png")
+        jpegs = glob.glob(f"/tmp/{guid}/*.jpeg")
+        jpgs = glob.glob(f"/tmp/{guid}/*.jpg")
         cutouts = pngs + jpegs + jpgs
         return cutouts, messages
 

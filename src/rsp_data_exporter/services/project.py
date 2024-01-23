@@ -41,7 +41,7 @@ def lookup_project_record(vendor_project_id):
 
             logger.log_text("about to check project status")
             if status in CLOSED_PROJECT_STATUSES:
-                messages.append("This project is in a status of " + status + " - either create a new project or contact Rubin to request for the project to be reopened.")
+                messages.append(f"This project is in a status of {status} - either create a new project or contact Rubin to request for the project to be reopened.")
             else:
                 logger.log_text("project status is in a good place")
                 project_id = row.cit_sci_proj_id

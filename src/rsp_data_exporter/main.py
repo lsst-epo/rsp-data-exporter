@@ -82,7 +82,7 @@ def check_status_of_previously_executed_ingest():
 
     if exists:
         response.status = "success"
-        response.manifest_url = CLOUD_STORAGE_CIT_SCI_URL_PREFIX + CLOUD_STORAGE_CIT_SCI_PUBLIC + "/" + guid + "/manifest.csv"
+        response.manifest_url = f"{CLOUD_STORAGE_CIT_SCI_URL_PREFIX}{CLOUD_STORAGE_CIT_SCI_PUBLIC}/{guid}/manifest.csv"
     else:
         response.status = "error"
         response.messages.append("The job either failed or is still processing, please try again later.")
@@ -108,7 +108,7 @@ def download_tabular_data_and_process():
 
     if validator.error is False:
         tabular_records = download_zip(CLOUD_STORAGE_BUCKET_HIPS2FITS , "manifest.csv", guid, validator.data_rights_approved, True)
-        manifest_url = ManifestFileService.upload_manifest("/tmp/" + guid + "/manifest.csv")
+        manifest_url = ManifestFileService.upload_manifest(f"/tmp/{guid}/manifest.csv")
         # if data_format == "objects":
         #     TabularDatService.create_dr_objects_records(csv_path)
         # elif data_format == "diaobjects":
@@ -152,7 +152,7 @@ def download_image_data_and_process():
     
     if validator.error is False:
         # astro cutouts data
-        cutouts = download_zip(CLOUD_STORAGE_BUCKET_HIPS2FITS, guid + ".zip", guid, validator.data_rights_approved)
+        cutouts = download_zip(CLOUD_STORAGE_BUCKET_HIPS2FITS, f"{guid}.zip", guid, validator.data_rights_approved)
 
         if validator.error is False:
             urls = upload_cutouts(cutouts)
@@ -193,7 +193,7 @@ def fetch_audit_records():
         logger.log_text(e.__str__())
         response = DataExporterResponse()
         response.status = "ERROR"
-        response.messages.append("An error occurred while looking up the audit records associated with Zooniverse project ID: " + vendor_project_id)
+        response.messages.append(f"An error occurred while looking up the audit records associated with Zooniverse project ID: {vendor_project_id}")
         return json.dumps(response.__dict__)
 
 def insert_audit_records(vendor_project_id):
@@ -206,7 +206,7 @@ def insert_audit_records(vendor_project_id):
         logger.log_text(e.__str__())
         response = DataExporterResponse()
         response.status = "ERROR"
-        response.messages.append("An error occurred while looking up the audit records associated with Zooniverse project ID: " + vendor_project_id)
+        response.messages.append(f"An error occurred while looking up the audit records associated with Zooniverse project ID: {vendor_project_id}")
         return json.dumps(response.__dict__)
 
 def update_meta_records_with_user_values(meta_records):
@@ -243,8 +243,8 @@ def transfer_tabular_manifest(bucket, guid):
     # Get the bucket that the file will be uploaded to.
     bucket = gcs.bucket(bucket)
 
-    manifestBlob = bucket.blob(guid + "/manifest.csv")
-    manifestBlob.upload_from_filename("/tmp/" + guid + "/manifest.csv")
+    manifestBlob = bucket.blob(f"{guid}/manifest.csv")
+    manifestBlob.upload_from_filename(f"/tmp/{guid}/manifest.csv")
     ManifestFileService.update_batch_record_with_manifest_url(manifestBlob.public_url)
     return manifestBlob.public_url
 

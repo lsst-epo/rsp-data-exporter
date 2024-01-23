@@ -21,7 +21,7 @@ CLOUD_STORAGE_CIT_SCI_PUBLIC = os.environ["CLOUD_STORAGE_CIT_SCI_PUBLIC"]
 
 def check_if_manifest_file_exists(guid):
     gcs = storage.Client()
-    manifest_path = guid + "/manifest.csv"
+    manifest_path = f"{guid}/manifest.csv"
 
     # Get the bucket that the file will be uploaded to.
     bucket = gcs.bucket(CLOUD_STORAGE_CIT_SCI_PUBLIC)
@@ -113,16 +113,14 @@ def build_and_upload_manifest(urls, bucket, batch_id, guid = ""):
 
     # Read the manifest that came from the RSP and store it in a dict with 
     # the filename as the key
-    with open('/tmp/' + guid + '/manifest.csv', 'r') as csv_file:
+    with open(f"/tmp/{guid}/manifest.csv", 'r') as csv_file:
         csv_reader = csv.reader(csv_file, delimiter = ',')
         has_flipbook_columns = False # by default
     
-        first = True
         # loop to iterate through the rows of csv
-        for row in csv_reader:
-            
-            # adding the first row
-            if first == True:
+        for idx, row in enumerate(csv_reader):
+            if idx == 0:
+                # adding the first row
                 column_names += row
                 
                 # Add edc_ver_id as external_id column header
@@ -136,7 +134,6 @@ def build_and_upload_manifest(urls, bucket, batch_id, guid = ""):
                     # Add URL column header
                     column_names.append("location:1")
                     filename_idx = column_names.index("filename")
-                first = False
             else:
                 if has_flipbook_columns == True:
                     metadata = {}
@@ -148,7 +145,7 @@ def build_and_upload_manifest(urls, bucket, batch_id, guid = ""):
                         cutout_metadata[filename]["location:1"] = row[filename_idx]
                         # object ID
                         obj_id_col_num = loc.replace("location:image_", "")
-                        obj_id_idx = column_names.index("objectId:image_" + obj_id_col_num)
+                        obj_id_idx = column_names.index(f"objectId:image_{obj_id_col_num}")
                         cutout_metadata[filename]["objectId"] = row[obj_id_idx]
                         cutout_metadata[filename]["objectIdType"] = "DIRECT"
                         # EDC ver ID
@@ -156,7 +153,6 @@ def build_and_upload_manifest(urls, bucket, batch_id, guid = ""):
                         cutout_metadata[filename]["external_id"] = edc_ver_id
 
                     for c_idx, col in enumerate(row):
-
                         if "location:image_" not in column_names[c_idx] and "objectId:image_" not in column_names[c_idx]:
                             cutout_metadata[filename][column_names[c_idx]] = col
 
@@ -182,7 +178,7 @@ def build_and_upload_manifest(urls, bucket, batch_id, guid = ""):
         if "objectIdType" not in column_names:
             column_names.append("objectIdType")
 
-    with open('/tmp/' + guid + '/manifest.csv', 'w', newline='') as csvfile:
+    with open(f"/tmp/{guid}/manifest.csv", 'w', newline='') as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=column_names)
         writer.writeheader()
 
@@ -198,9 +194,9 @@ def build_and_upload_manifest(urls, bucket, batch_id, guid = ""):
                 if has_flipbook_columns == True:
                     for col in column_names:
                         if "location:image_" in col:
-                            csv_row[col] = '/'.join(url_list) + "/" + csv_row[col]
+                            csv_row[col] = f"{'/'.join(url_list)}/{csv_row[col]}"
                             obj_id_col_num = col.replace("location:image_", "")
-                            csv_row["objectId"] = upload_manifest[filename]["objectId:image_" + obj_id_col_num]
+                            csv_row["objectId"] = upload_manifest[filename][f"objectId:image_{obj_id_col_num}"]
                             csv_row["objectIdType"] = "DIRECT"
                     del csv_row["filename"]
                 else:
@@ -208,8 +204,8 @@ def build_and_upload_manifest(urls, bucket, batch_id, guid = ""):
 
                 writer.writerow(csv_row)
 
-    manifestBlob = bucket.blob(guid + "/manifest.csv")
-    manifestBlob.upload_from_filename("/tmp/" + guid + "/manifest.csv")
+    manifestBlob = bucket.blob(f"{guid}/manifest.csv")
+    manifestBlob.upload_from_filename(f"/tmp/{guid}/manifest.csv")
     update_batch_record_with_manifest_url(manifestBlob.public_url, batch_id)
     return manifestBlob.public_url, cutout_metadata
 
