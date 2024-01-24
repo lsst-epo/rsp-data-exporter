@@ -118,6 +118,7 @@ def build_and_upload_manifest(urls, bucket, batch_id, guid = ""):
         has_flipbook_columns = False # by default
     
         # loop to iterate through the rows of csv
+        edc_ver_id = round(time.time() * 1000) 
         for idx, row in enumerate(csv_reader):
             if idx == 0:
                 # adding the first row
@@ -164,8 +165,8 @@ def build_and_upload_manifest(urls, bucket, batch_id, guid = ""):
                     metadata[column_names[c_idx]] = col
                 
                 # Add the edc_ver_id
-                edc_ver_id = round(time.time() * 1000) + 1
                 metadata["edc_ver_id"] = edc_ver_id
+                edc_ver_id += 1
 
                 # Map metadata row to filename key
                 upload_manifest[filename] = metadata
