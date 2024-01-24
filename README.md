@@ -1,10 +1,10 @@
 # rsp-data-exporter
 
-This repo contains the various citizen science project builder notebooks. The notebooks can be used in the Rubin Science Platform Notebook Aspect environment to curate data that can then be sent to the Zooniverse platform such that new subject sets can be created from Rubin data.
+This repo contains the backend service for processing Rubin citizen science data before hosting it publicly for reference via a Zooniverse workflow page. By itself, this service does not do much and works in concert with Rubin citizen science notebooks, the `rubin.citsci` PyPI package, and the Zooniverse platform.
 
 ## Data Panel Review
 
-Projects must be approved by the Rubin Data Rights Panel before a Zooniverse project goes live. Your initial curated data will be reviewed by the data panel and must not exceed 100 objects (100 distinct astro image cutouts, etc.)
+Projects must be approved by the Rubin Data Rights Panel before a Zooniverse project goes live. Your initial curated data will be reviewed by the data panel and must not exceed 100 objects (100 distinct astro image cutouts, etc.). Any data in excess of 100 objects will be truncated such that only 100 objects are processed.
 
 In order for the Data Rights Panel to review your code, complete the following steps:
 
