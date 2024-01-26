@@ -27,26 +27,25 @@ def create_new_batch(project_id, vendor_batch_id):
     batch_id = -1;
     messages = []
 
+    db = DatabaseService.get_db_connection()
     try:
-        db = DatabaseService.get_db_connection()
-        db.expire_on_commit = False
         citizen_science_batch_record = CitizenScienceBatches(cit_sci_proj_id=project_id, vendor_batch_id=vendor_batch_id, batch_status='ACTIVE')    
         db.add(citizen_science_batch_record)
-        
-        db.commit()
-        db.expunge_all()
-        db.close()
+        db.flush()
         batch_id = citizen_science_batch_record.cit_sci_batch_id
     except Exception as e:
+        db.rollback()
         logger.log_text("An exception occurred while trying to create a new batch!:")
         logger.log_text(str(e))
         messages.append("An error occurred while attempting to create a new data batch record for you - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
+
+    db.commit()
+    db.close()
 
     return batch_id, messages
 
 def check_batch_status(project_id, vendor_project_id, test_only, data_rights_approved):
     batches_still_active = []
-    batches_not_found_in_zooniverse = []
     batches_in_db = []
     messages = []
 
@@ -74,7 +73,8 @@ def check_batch_status(project_id, vendor_project_id, test_only, data_rights_app
             # Call the Zooniverse API to get all subject sets for the project
             project = Project.find(int(vendor_project_id))
             subject_set_list = list(project.links.subject_sets)
-            
+            found_subject_set = False
+
             for batch_in_db in batches_in_db:
                 update_batch_record = False
 
@@ -87,7 +87,7 @@ def check_batch_status(project_id, vendor_project_id, test_only, data_rights_app
                         db.close()
                         return
                     
-                    found_subject_set = False
+                    
                     for sub in subject_set_list:
                         try:
                             if str(batch_in_db["vendor_batch_id_db"]) == sub.id:
@@ -125,7 +125,6 @@ def check_batch_status(project_id, vendor_project_id, test_only, data_rights_app
                             continue
 
                     if found_subject_set == False:
-                        batches_not_found_in_zooniverse.append(str(batch_in_db["vendor_batch_id_db"]))
                         update_batch_record = True
 
                 if update_batch_record == True:
@@ -142,4 +141,4 @@ def check_batch_status(project_id, vendor_project_id, test_only, data_rights_app
 
     db.close()
 
-    return batches_in_db, messages
+    return messages

@@ -284,22 +284,16 @@ def validate_project_metadata(email, vendor_project_id, vendor_batch_id = None):
 
     # Then, check batch status
     if validator.error == False:
-        batch_ids = check_batch_status(project_id, vendor_project_id) 
+        # First, update older batch records in the DB based on what's on the Zooniverse platform
+        check_batch_status(project_id, vendor_project_id) 
 
-        if batch_ids is not None and len(batch_ids) == 0:
-            # Create new batch record
-            batchId = create_new_batch(project_id, vendor_batch_id)
+        # Then create new batch record
+        batchId = create_new_batch(project_id, vendor_batch_id)
 
-            if(batchId > 0):
-                validator.batch_id = batchId
-                return True
-            else:
-                return False
+        if(batchId > 0):
+            validator.batch_id = batchId
+            return True
         else:
-            # logger.log_text("about to check if create_edc_logger_record() needs to be called")
-            # if validator.log_to_edc:
-            #     logger.log_text("calling! create_edc_logger_record()")
-            #     create_edc_logger_record()
             return False
     else:
         return False
@@ -320,12 +314,12 @@ def insert_meta_records(meta_records):
     meta_records_with_id = MetadataService.insert_meta_records(meta_records)
 
     meta_enum = validator.RecordType.CITIZEN_SCIENCE_META
-    for rec in meta_records:
-        print(str(rec.cit_sci_meta_id))
+    for rec in meta_records_with_id:
         validator.appendRollback(meta_enum, rec.cit_sci_meta_id)
-
-
-    return
+    logger.log_text("About to log validator._rollbacks! : ")
+    for rec in validator._rollbacks:
+        logger.log_text(f"Record type: {rec.recordType.name}; primary key: {rec.primaryKey}")
+    return meta_records_with_id
 
 def create_new_batch(project_id, vendor_batch_id):
     global validator, response, debug
@@ -336,18 +330,21 @@ def create_new_batch(project_id, vendor_batch_id):
         validator.error = True
         response.status = "error"
         response.messages.append(messages)
+    else:
+        batch_enum = validator.RecordType.CITIZEN_SCIENCE_BATCHES
+        validator.appendRollback(batch_enum, batch_id)
     return batch_id
 
 def check_batch_status(project_id, vendor_project_id):
     global validator, debug
     time_mark(debug, "Start of check batch status!!!")
 
-    batches_in_db, messages = BatchService.check_batch_status(project_id, vendor_project_id, TEST_ONLY, validator.data_rights_approved)
+    messages = BatchService.check_batch_status(project_id, vendor_project_id, TEST_ONLY, validator.data_rights_approved)
     if len(messages) > 0:
         validator.error = True
         response.status = "error"
         response.messages.append(messages)
-    return batches_in_db
+    return
 
 def create_new_project_record(owner_id, vendor_project_id):
     global validator, response, debug
@@ -358,6 +355,9 @@ def create_new_project_record(owner_id, vendor_project_id):
         validator.error = True
         response.status = "error"
         response.messages.append(messages)
+    else:
+        project_enum = validator.RecordType.CITIZEN_SCIENCE_PROJECTS
+        validator.appendRollback(project_enum, project_id)
     return project_id
 
 def lookup_project_record(vendor_project_id):

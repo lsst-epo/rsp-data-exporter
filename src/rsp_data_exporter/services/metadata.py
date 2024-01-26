@@ -25,21 +25,17 @@ def create_meta_records(urls):
     return meta_records
 
 def insert_meta_records(meta_records):
-    logger.log_text("about to bulk insert meta records in insert_meta_records()!!")
-    
-    db = DatabaseService.get_db_connection()
     try:  
+        db = DatabaseService.get_db_connection()
         db.expire_on_commit = False
-        logger.log_text("About to bulk save objects!")
         db.bulk_save_objects(meta_records, return_defaults=True)
         db.flush()
     except Exception as e:
         db.rollback()
-        logger.log_text("an exception occurred in insert_meta_records!")
+        logger.log_text("An exception occurred in insert_meta_records!")
         logger.log_text(e.__str__())
     db.commit()
-
-    logger.log_text("done bulk inserting meta records!")
+    db.close()
     return meta_records
 
 def lookup_meta_record(objectId, objectIdType, meta_id = None):
@@ -54,9 +50,6 @@ def lookup_meta_record(objectId, objectIdType, meta_id = None):
                 metaId = row.cit_sci_meta_id
  
             db.close()
-
-            logger.log_text("about to log metaId (queried via objectId/objectIdType) in lookup_meta_record()")
-            logger.log_text(str(metaId))
         else:
             db = DatabaseService.get_db_connection()
             stmt = select(CitizenScienceMeta).where(CitizenScienceMeta.cit_sci_meta_id == meta_id)
