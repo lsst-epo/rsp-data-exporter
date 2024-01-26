@@ -26,16 +26,18 @@ def create_meta_records(urls):
 
 def insert_meta_records(meta_records):
     logger.log_text("about to bulk insert meta records in insert_meta_records()!!")
-
-    try:
-        db = DatabaseService.get_db_connection()
+    
+    db = DatabaseService.get_db_connection()
+    try:  
         db.expire_on_commit = False
+        logger.log_text("About to bulk save objects!")
         db.bulk_save_objects(meta_records, return_defaults=True)
-        db.commit()
         db.flush()
     except Exception as e:
+        db.rollback()
         logger.log_text("an exception occurred in insert_meta_records!")
         logger.log_text(e.__str__())
+    db.commit()
 
     logger.log_text("done bulk inserting meta records!")
     return meta_records

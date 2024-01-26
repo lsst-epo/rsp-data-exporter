@@ -161,7 +161,7 @@ def download_image_data_and_process():
             if validator.error is False:                
                 manifest_url = build_and_upload_manifest(urls, CLOUD_STORAGE_CIT_SCI_PUBLIC, guid)
                 updated_meta_records = update_meta_records_with_user_values(meta_records)
-                meta_records_with_id = MetadataService.insert_meta_records(updated_meta_records)
+                meta_records_with_id = insert_meta_records(updated_meta_records)
                 LookupService.insert_lookup_records(meta_records_with_id, validator.project_id, validator.batch_id)
                 response.status = "success"
                 response.manifest_url = manifest_url
@@ -313,7 +313,20 @@ def validate_project_metadata(email, vendor_project_id, vendor_batch_id = None):
 #     db.commit()
 #     db.close()
 #     return
-        
+
+def insert_meta_records(meta_records):
+    global validator, response, debug
+    time_mark(debug, "Start of insert new meta records")
+    meta_records_with_id = MetadataService.insert_meta_records(meta_records)
+
+    meta_enum = validator.RecordType.CITIZEN_SCIENCE_META
+    for rec in meta_records:
+        print(str(rec.cit_sci_meta_id))
+        validator.appendRollback(meta_enum, rec.cit_sci_meta_id)
+
+
+    return
+
 def create_new_batch(project_id, vendor_batch_id):
     global validator, response, debug
     time_mark(debug, "Start of create new batch")
