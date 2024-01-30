@@ -55,7 +55,8 @@ def update_meta_records_with_user_values(meta_records, mapped_manifest):
         try:
             if filename in mapped_manifest:
                 user_defined_data = mapped_manifest[filename]
-                edc_ver_id = mapped_manifest[filename]["external_id"]
+                # edc_ver_id = mapped_manifest[filename]["external_id"]
+                edc_ver_id = mapped_manifest[filename]["edc_ver_id"]
 
                 object_id = None
                 if "objectId" in mapped_manifest[filename]:
@@ -79,7 +80,7 @@ def update_meta_records_with_user_values(meta_records, mapped_manifest):
                     
                 if "filename" in user_defined_data:
                     del user_defined_data["filename"]
-                del user_defined_data["external_id"]
+                # del user_defined_data["external_id"]
 
                 # The only valid values for objectIdType are DIRECT and INDIRECT, so set all
                 # values to INDIRECT if the come in the request as neither
@@ -136,8 +137,10 @@ def build_and_upload_manifest(urls, bucket, batch_id, guid = ""):
                     column_names.append("location:1")
                     filename_idx = column_names.index("filename")
             else:
+                metadata = {}
+                metadata["edc_ver_id"] = edc_ver_id
+                edc_ver_id += 1
                 if has_flipbook_columns == True:
-                    metadata = {}
                     for loc in location_cols:
                         # filename
                         filename_idx = column_names.index(loc)
@@ -150,26 +153,37 @@ def build_and_upload_manifest(urls, bucket, batch_id, guid = ""):
                         cutout_metadata[filename]["objectId"] = row[obj_id_idx]
                         cutout_metadata[filename]["objectIdType"] = "DIRECT"
                         # EDC ver ID
-                        edc_ver_id = round(time.time() * 1000) + 1
-                        cutout_metadata[filename]["external_id"] = edc_ver_id
+                        # edc_ver_id = round(time.time() * 1000) + 1
+                        # cutout_metadata[filename]["external_id"] = edc_ver_id
 
                     for c_idx, col in enumerate(row):
                         if "location:image_" not in column_names[c_idx] and "objectId:image_" not in column_names[c_idx]:
                             cutout_metadata[filename][column_names[c_idx]] = col
+                else:
+                    # Set new key for row
+                    filename = row[filename_idx]
+
+                    metadata = {}
+                    for m_idx, col in enumerate(row):
+                        metadata[column_names[m_idx]] = col
+                    
+                    # Map metadata row to filename key
+                    metadata["edc_ver_id"] = edc_ver_id
+                    cutout_metadata[filename] = metadata
 
                 filename_idx = column_names.index("filename")
                 filename = row[filename_idx]
 
-                metadata = {}
+                manifest_metadata = {}
                 for c_idx, col in enumerate(row):
                     metadata[column_names[c_idx]] = col
                 
                 # Add the edc_ver_id
-                metadata["edc_ver_id"] = edc_ver_id
-                edc_ver_id += 1
+                manifest_metadata["edc_ver_id"] = edc_ver_id
+                # edc_ver_id += 1
 
                 # Map metadata row to filename key
-                upload_manifest[filename] = metadata
+                upload_manifest[filename] = manifest_metadata
 
     # loop over urls
     if has_flipbook_columns == True:

@@ -162,17 +162,14 @@ def download_image_data_and_process():
                 manifest_url = build_and_upload_manifest(urls, CLOUD_STORAGE_CIT_SCI_PUBLIC, guid)
                 updated_meta_records = update_meta_records_with_user_values(meta_records)
                 meta_records_with_id = insert_meta_records(updated_meta_records)
-                LookupService.insert_lookup_records(meta_records_with_id, validator.project_id, validator.batch_id)
+                insert_lookup_records(meta_records_with_id, validator.project_id, validator.batch_id)
                 response.status = "success"
                 response.manifest_url = manifest_url
 
-                audit_records, audit_messages = insert_audit_records(vendor_project_id)
+                audit_records = insert_audit_records(vendor_project_id)
 
                 if len(audit_records) < len(validator.mapped_manifest):
                     response.messages.append("Some audit records were not inserted!")
-
-                if len(audit_messages) > 0:
-                    response.messages = response.messages + audit_messages
     else:
         response.status = "error"
         if response.messages == None or len(response.messages) == 0:
@@ -196,11 +193,19 @@ def fetch_audit_records():
         response.messages.append(f"An error occurred while looking up the audit records associated with Zooniverse project ID: {vendor_project_id}")
         return json.dumps(response.__dict__)
 
-def insert_audit_records(vendor_project_id):
+def insert_lookup_records(meta_records_with_id, project_id, batch_id):
     global validator
+    lookup_records = LookupService.insert_lookup_records(meta_records_with_id, project_id, batch_id)
+    lookup_enum = validator.RecordType.CITIZEN_SCIENCE_PROJ_META_LOOKUP
+    for record in lookup_records:
+        validator.appendRollback(lookup_enum, record.cit_sci_lookup_id)
+    return
+
+def insert_audit_records(vendor_project_id):
+    global validator, response
     vendor_project_id = request.args.get("vendor_project_id")
     try:
-        return AuditReportService.insert_audit_records(vendor_project_id, validator.mapped_manifest, validator.owner_id)
+        audit_records, messages = AuditReportService.insert_audit_records(vendor_project_id, validator.mapped_manifest, validator.owner_id)
     except Exception as e:
         logger.log_text("An exception occurred in insert_audit_records!")
         logger.log_text(e.__str__())
@@ -208,6 +213,17 @@ def insert_audit_records(vendor_project_id):
         response.status = "ERROR"
         response.messages.append(f"An error occurred while looking up the audit records associated with Zooniverse project ID: {vendor_project_id}")
         return json.dumps(response.__dict__)
+    
+    if len(messages) > 0: # These are audit messages, not error messages
+        # validator.error = True
+        # response.status = "error"
+        response.messages.append(messages)
+
+    audit_enum = validator.RecordType.CITIZEN_SCIENCE_AUDIT
+    for rec in audit_records:
+        validator.appendRollback(audit_enum, rec.cit_sci_audit_id)
+
+    return audit_records
 
 def update_meta_records_with_user_values(meta_records):
     user_defined_values, info_message = ManifestFileService.update_meta_records_with_user_values(meta_records, validator.mapped_manifest)
@@ -316,9 +332,7 @@ def insert_meta_records(meta_records):
     meta_enum = validator.RecordType.CITIZEN_SCIENCE_META
     for rec in meta_records_with_id:
         validator.appendRollback(meta_enum, rec.cit_sci_meta_id)
-    logger.log_text("About to log validator._rollbacks! : ")
-    for rec in validator._rollbacks:
-        logger.log_text(f"Record type: {rec.recordType.name}; primary key: {rec.primaryKey}")
+
     return meta_records_with_id
 
 def create_new_batch(project_id, vendor_batch_id):
@@ -381,6 +395,9 @@ def create_new_owner_record(email):
         validator.error = True
         response.status = "error"
         response.messages.append(messages)
+
+    owner_enum = validator.RecordType.CITIZEN_SCIENCE_OWNERS
+    validator.appendRollback(owner_enum, owner_id)
     return owner_id
 
 def lookup_owner_record(email):
@@ -391,6 +408,8 @@ def lookup_owner_record(email):
         validator.error = True
         response.status = "error"
         response.messages.append(messages)
+    validator.owner_id = owner_id
+    logger.log_text(f"Logging validator.owner_id : {validator.owner_id}")
     return owner_id
 
 def locate(pattern, root_path):
