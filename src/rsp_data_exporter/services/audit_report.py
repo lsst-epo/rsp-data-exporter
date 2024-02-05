@@ -1,4 +1,4 @@
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from google.cloud import logging
 from panoptes_client import Project
 from . import db as DatabaseService
@@ -14,6 +14,19 @@ except:
         from models.citizen_science.citizen_science_audit import CitizenScienceAudit
     except:
         pass
+
+def rollback_audit_record(rollback):
+    try:
+        db = DatabaseService.get_db_connection()
+        stmt = delete(CitizenScienceAudit).where(CitizenScienceAudit.cit_sci_audit_id == rollback.primaryKey)
+        db.execute(stmt)
+        db.commit()
+    except Exception as e:
+        logger.log_text(e.__str__())
+        return False
+    
+    db.close()
+    return True
 
 def fetch_audit_records(vendor_project_id):
     try:
@@ -41,18 +54,19 @@ def insert_audit_records(vendor_project_id, mapped_manifest, owner_id):
             object_ids.append(object_id)
             audit_records.append(CitizenScienceAudit(object_id=object_id, cit_sci_owner_id=owner_id, vendor_project_id=vendor_project_id))
 
-        if len(audit_records) > 0:
-            try:
-                db = DatabaseService.get_db_connection()
-                db.expire_on_commit = False
-                db.bulk_save_objects(audit_records, return_defaults=True)
-                db.commit()
-                db.flush()
-            except Exception as e:
-                logger.log_text("an exception occurred in insert_audit_records!")
-                logger.log_text(e.__str__())
+    if len(audit_records) > 0:
+        try:
+            db = DatabaseService.get_db_connection()
+            db.bulk_save_objects(audit_records, return_defaults=True)
+            db.flush()
+        except Exception as e:
+            db.rollback()
+            logger.log_text("an exception occurred in insert_audit_records!")
+            logger.log_text(e.__str__())
     
     audit_messages = []
+    db.commit()
+    db.close()
     try:
         audit_messages = audit_object_ids(object_ids, vendor_project_id)
     except Exception as e:

@@ -9,3 +9,6 @@ env/
 .vscode/
 key.json
 .coverage
+docker-compose.yaml
+db/
+skyviewer.json

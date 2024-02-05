@@ -1,5 +1,5 @@
 import time, json
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from google.cloud import logging
 from . import db as DatabaseService
 
@@ -15,6 +15,19 @@ logging_client = logging.Client()
 log_name = "rsp-data-exporter.metadata_service"
 logger = logging_client.logger(log_name)
 
+def rollback_meta_record(rollback):
+    try:
+        db = DatabaseService.get_db_connection()
+        stmt = delete(CitizenScienceMeta).where(CitizenScienceMeta.cit_sci_meta_id == rollback.primaryKey)
+        db.execute(stmt)
+        db.commit()
+    except Exception as e:
+        logger.log_text(e.__str__())
+        return False
+    
+    db.close()
+    return True
+
 def create_meta_records(urls):
     meta_records = []
     for url in urls:
@@ -25,19 +38,17 @@ def create_meta_records(urls):
     return meta_records
 
 def insert_meta_records(meta_records):
-    logger.log_text("about to bulk insert meta records in insert_meta_records()!!")
-
-    try:
+    try:  
         db = DatabaseService.get_db_connection()
         db.expire_on_commit = False
         db.bulk_save_objects(meta_records, return_defaults=True)
-        db.commit()
         db.flush()
     except Exception as e:
-        logger.log_text("an exception occurred in insert_meta_records!")
+        db.rollback()
+        logger.log_text("An exception occurred in insert_meta_records!")
         logger.log_text(e.__str__())
-
-    logger.log_text("done bulk inserting meta records!")
+    db.commit()
+    db.close()
     return meta_records
 
 def lookup_meta_record(objectId, objectIdType, meta_id = None):
@@ -52,9 +63,6 @@ def lookup_meta_record(objectId, objectIdType, meta_id = None):
                 metaId = row.cit_sci_meta_id
  
             db.close()
-
-            logger.log_text("about to log metaId (queried via objectId/objectIdType) in lookup_meta_record()")
-            logger.log_text(str(metaId))
         else:
             db = DatabaseService.get_db_connection()
             stmt = select(CitizenScienceMeta).where(CitizenScienceMeta.cit_sci_meta_id == meta_id)

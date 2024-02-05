@@ -160,24 +160,47 @@ def download_image_data_and_process():
 
             if validator.error is False:                
                 manifest_url = build_and_upload_manifest(urls, CLOUD_STORAGE_CIT_SCI_PUBLIC, guid)
-                updated_meta_records = update_meta_records_with_user_values(meta_records)
-                meta_records_with_id = MetadataService.insert_meta_records(updated_meta_records)
-                LookupService.insert_lookup_records(meta_records_with_id, validator.project_id, validator.batch_id)
-                response.status = "success"
-                response.manifest_url = manifest_url
 
-                audit_records, audit_messages = insert_audit_records(vendor_project_id)
+                if validator.error is False:  
+                    updated_meta_records = update_meta_records_with_user_values(meta_records)
+                    
+                    if validator.error is False: 
+                        meta_records_with_id = insert_meta_records(updated_meta_records)
 
-                if len(audit_records) < len(validator.mapped_manifest):
-                    response.messages.append("Some audit records were not inserted!")
+                        if validator.error is False: 
+                            insert_lookup_records(meta_records_with_id, validator.project_id, validator.batch_id)
+                            response.status = "success"
+                            response.manifest_url = manifest_url
 
-                if len(audit_messages) > 0:
-                    response.messages = response.messages + audit_messages
+                            if validator.error is False: 
+                                audit_records = insert_audit_records(vendor_project_id)
+
+                                if len(audit_records) < len(validator.mapped_manifest):
+                                    response.messages.append("Some audit records were not inserted!")
     else:
         response.status = "error"
         if response.messages == None or len(response.messages) == 0:
             response.messages.append("An error occurred while processing the data batch, please try again later.")
     
+    if validator.error is True:
+    # Check for database rollbacks/clean-up
+        # First, delete the lookup records because they ahve a foreign key constraint on all records
+        for rollback in validator._rollbacks:
+            if rollback.recordType.name == "CITIZEN_SCIENCE_PROJ_META_LOOKUP":
+                LookupService.rollback_lookup_record(rollback)
+
+        for rollback in validator._rollbacks:
+            match rollback.recordType.name:
+                case "CITIZEN_SCIENCE_OWNERS":
+                    OwnerService.rollback_owner_record(rollback)
+                case "CITIZEN_SCIENCE_PROJECTS":
+                    ProjectService.rollback_project_record(rollback)
+                case "CITIZEN_SCIENCE_BATCHES":
+                    BatchService.rollback_batch_record(rollback)
+                case "CITIZEN_SCIENCE_META":
+                    MetadataService.rollback_meta_record(rollback)
+                case "CITIZEN_SCIENCE_AUDIT":
+                    AuditReportService.rollback_audit_record(rollback)
 
     res = json.dumps(response.__dict__)
     time_mark(debug, "Done processing, return response to notebook aspect")
@@ -196,11 +219,22 @@ def fetch_audit_records():
         response.messages.append(f"An error occurred while looking up the audit records associated with Zooniverse project ID: {vendor_project_id}")
         return json.dumps(response.__dict__)
 
-def insert_audit_records(vendor_project_id):
+def insert_lookup_records(meta_records_with_id, project_id, batch_id):
     global validator
+    lookup_records = LookupService.insert_lookup_records(meta_records_with_id, project_id, batch_id)
+    lookup_enum = validator.RecordType.CITIZEN_SCIENCE_PROJ_META_LOOKUP
+    for record in lookup_records:
+        validator.appendRollback(lookup_enum, record.cit_sci_lookup_id)
+
+    for rollback in validator._rollbacks:
+        logger.log_text(f"{rollback.recordType.name} : {str(rollback.primaryKey)}")
+    return
+
+def insert_audit_records(vendor_project_id):
+    global validator, response
     vendor_project_id = request.args.get("vendor_project_id")
     try:
-        return AuditReportService.insert_audit_records(vendor_project_id, validator.mapped_manifest, validator.owner_id)
+        audit_records, messages = AuditReportService.insert_audit_records(vendor_project_id, validator.mapped_manifest, validator.owner_id)
     except Exception as e:
         logger.log_text("An exception occurred in insert_audit_records!")
         logger.log_text(e.__str__())
@@ -208,6 +242,17 @@ def insert_audit_records(vendor_project_id):
         response.status = "ERROR"
         response.messages.append(f"An error occurred while looking up the audit records associated with Zooniverse project ID: {vendor_project_id}")
         return json.dumps(response.__dict__)
+    
+    if len(messages) > 0: # These are audit messages, not error messages
+        # validator.error = True
+        # response.status = "error"
+        response.messages.append(messages)
+
+    audit_enum = validator.RecordType.CITIZEN_SCIENCE_AUDIT
+    for rec in audit_records:
+        validator.appendRollback(audit_enum, rec.cit_sci_audit_id)
+
+    return audit_records
 
 def update_meta_records_with_user_values(meta_records):
     user_defined_values, info_message = ManifestFileService.update_meta_records_with_user_values(meta_records, validator.mapped_manifest)
@@ -284,22 +329,16 @@ def validate_project_metadata(email, vendor_project_id, vendor_batch_id = None):
 
     # Then, check batch status
     if validator.error == False:
-        batch_ids = check_batch_status(project_id, vendor_project_id) 
+        # First, update older batch records in the DB based on what's on the Zooniverse platform
+        check_batch_status(project_id, vendor_project_id) 
 
-        if batch_ids is not None and len(batch_ids) == 0:
-            # Create new batch record
-            batchId = create_new_batch(project_id, vendor_batch_id)
+        # Then create new batch record
+        batchId = create_new_batch(project_id, vendor_batch_id)
 
-            if(batchId > 0):
-                validator.batch_id = batchId
-                return True
-            else:
-                return False
+        if(batchId > 0):
+            validator.batch_id = batchId
+            return True
         else:
-            # logger.log_text("about to check if create_edc_logger_record() needs to be called")
-            # if validator.log_to_edc:
-            #     logger.log_text("calling! create_edc_logger_record()")
-            #     create_edc_logger_record()
             return False
     else:
         return False
@@ -313,7 +352,18 @@ def validate_project_metadata(email, vendor_project_id, vendor_batch_id = None):
 #     db.commit()
 #     db.close()
 #     return
-        
+
+def insert_meta_records(meta_records):
+    global validator, response, debug
+    time_mark(debug, "Start of insert new meta records")
+    meta_records_with_id = MetadataService.insert_meta_records(meta_records)
+
+    meta_enum = validator.RecordType.CITIZEN_SCIENCE_META
+    for rec in meta_records_with_id:
+        validator.appendRollback(meta_enum, rec.cit_sci_meta_id)
+
+    return meta_records_with_id
+
 def create_new_batch(project_id, vendor_batch_id):
     global validator, response, debug
     time_mark(debug, "Start of create new batch")
@@ -323,18 +373,21 @@ def create_new_batch(project_id, vendor_batch_id):
         validator.error = True
         response.status = "error"
         response.messages.append(messages)
+    else:
+        batch_enum = validator.RecordType.CITIZEN_SCIENCE_BATCHES
+        validator.appendRollback(batch_enum, batch_id)
     return batch_id
 
 def check_batch_status(project_id, vendor_project_id):
     global validator, debug
     time_mark(debug, "Start of check batch status!!!")
 
-    batches_in_db, messages = BatchService.check_batch_status(project_id, vendor_project_id, TEST_ONLY, validator.data_rights_approved)
+    messages = BatchService.check_batch_status(project_id, vendor_project_id, TEST_ONLY, validator.data_rights_approved)
     if len(messages) > 0:
         validator.error = True
         response.status = "error"
         response.messages.append(messages)
-    return batches_in_db
+    return messages
 
 def create_new_project_record(owner_id, vendor_project_id):
     global validator, response, debug
@@ -345,6 +398,9 @@ def create_new_project_record(owner_id, vendor_project_id):
         validator.error = True
         response.status = "error"
         response.messages.append(messages)
+    else:
+        project_enum = validator.RecordType.CITIZEN_SCIENCE_PROJECTS
+        validator.appendRollback(project_enum, project_id)
     return project_id
 
 def lookup_project_record(vendor_project_id):
@@ -368,6 +424,9 @@ def create_new_owner_record(email):
         validator.error = True
         response.status = "error"
         response.messages.append(messages)
+
+    owner_enum = validator.RecordType.CITIZEN_SCIENCE_OWNERS
+    validator.appendRollback(owner_enum, owner_id)
     return owner_id
 
 def lookup_owner_record(email):
@@ -378,6 +437,8 @@ def lookup_owner_record(email):
         validator.error = True
         response.status = "error"
         response.messages.append(messages)
+    validator.owner_id = owner_id
+    logger.log_text(f"Logging validator.owner_id : {validator.owner_id}")
     return owner_id
 
 def locate(pattern, root_path):
