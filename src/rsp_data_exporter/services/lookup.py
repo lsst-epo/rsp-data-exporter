@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from google.cloud import logging
 from . import db as DatabaseService
 
@@ -13,6 +13,19 @@ except:
 logging_client = logging.Client()
 log_name = "rsp-data-exporter.lookup_service"
 logger = logging_client.logger(log_name)
+
+def rollback_lookup_record(rollback):
+    try:
+        db = DatabaseService.get_db_connection()
+        stmt = delete(CitizenScienceProjMetaLookup).where(CitizenScienceProjMetaLookup.cit_sci_lookup_id == rollback.primaryKey)
+        db.execute(stmt)
+        db.commit()
+    except Exception as e:
+        logger.log_text(e.__str__())
+        return False
+    
+    db.close()
+    return True
 
 def query_lookup_records(project_id, batch_id):
     db = DatabaseService.get_db_connection()

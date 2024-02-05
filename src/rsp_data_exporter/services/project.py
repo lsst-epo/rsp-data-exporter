@@ -1,5 +1,5 @@
 import os
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from google.cloud import logging
 from . import db as DatabaseService
 
@@ -16,6 +16,19 @@ CLOSED_PROJECT_STATUSES = ["COMPLETE", "CANCELLED", "ABANDONED"]
 logging_client = logging.Client()
 log_name = "rsp-data-exporter.project_service"
 logger = logging_client.logger(log_name)
+
+def rollback_project_record(rollback):
+    try:
+        db = DatabaseService.get_db_connection()
+        stmt = delete(CitizenScienceProjects).where(CitizenScienceProjects.cit_sci_proj_id == rollback.primaryKey)
+        db.execute(stmt)
+        db.commit()
+    except Exception as e:
+        logger.log_text(e.__str__())
+        return False
+    
+    db.close()
+    return True
 
 def lookup_project_record(vendor_project_id):
     project_id = None

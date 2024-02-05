@@ -160,21 +160,47 @@ def download_image_data_and_process():
 
             if validator.error is False:                
                 manifest_url = build_and_upload_manifest(urls, CLOUD_STORAGE_CIT_SCI_PUBLIC, guid)
-                updated_meta_records = update_meta_records_with_user_values(meta_records)
-                meta_records_with_id = insert_meta_records(updated_meta_records)
-                insert_lookup_records(meta_records_with_id, validator.project_id, validator.batch_id)
-                response.status = "success"
-                response.manifest_url = manifest_url
 
-                audit_records = insert_audit_records(vendor_project_id)
+                if validator.error is False:  
+                    updated_meta_records = update_meta_records_with_user_values(meta_records)
+                    
+                    if validator.error is False: 
+                        meta_records_with_id = insert_meta_records(updated_meta_records)
 
-                if len(audit_records) < len(validator.mapped_manifest):
-                    response.messages.append("Some audit records were not inserted!")
+                        if validator.error is False: 
+                            insert_lookup_records(meta_records_with_id, validator.project_id, validator.batch_id)
+                            response.status = "success"
+                            response.manifest_url = manifest_url
+
+                            if validator.error is False: 
+                                audit_records = insert_audit_records(vendor_project_id)
+
+                                if len(audit_records) < len(validator.mapped_manifest):
+                                    response.messages.append("Some audit records were not inserted!")
     else:
         response.status = "error"
         if response.messages == None or len(response.messages) == 0:
             response.messages.append("An error occurred while processing the data batch, please try again later.")
     
+    if validator.error is True:
+    # Check for database rollbacks/clean-up
+        # First, delete the lookup records because they ahve a foreign key constraint on all records
+        for rollback in validator._rollbacks:
+            if rollback.recordType.name == "CITIZEN_SCIENCE_PROJ_META_LOOKUP":
+                LookupService.rollback_lookup_record(rollback)
+
+        for rollback in validator._rollbacks:
+            match rollback.recordType.name:
+                case "CITIZEN_SCIENCE_OWNERS":
+                    OwnerService.rollback_owner_record(rollback)
+                case "CITIZEN_SCIENCE_PROJECTS":
+                    ProjectService.rollback_project_record(rollback)
+                case "CITIZEN_SCIENCE_BATCHES":
+                    BatchService.rollback_batch_record(rollback)
+                case "CITIZEN_SCIENCE_META":
+                    MetadataService.rollback_meta_record(rollback)
+                case "CITIZEN_SCIENCE_AUDIT":
+                    AuditReportService.rollback_audit_record(rollback)
 
     res = json.dumps(response.__dict__)
     time_mark(debug, "Done processing, return response to notebook aspect")
@@ -199,6 +225,9 @@ def insert_lookup_records(meta_records_with_id, project_id, batch_id):
     lookup_enum = validator.RecordType.CITIZEN_SCIENCE_PROJ_META_LOOKUP
     for record in lookup_records:
         validator.appendRollback(lookup_enum, record.cit_sci_lookup_id)
+
+    for rollback in validator._rollbacks:
+        logger.log_text(f"{rollback.recordType.name} : {str(rollback.primaryKey)}")
     return
 
 def insert_audit_records(vendor_project_id):

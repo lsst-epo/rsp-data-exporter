@@ -1,4 +1,4 @@
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from google.cloud import logging
 from panoptes_client import Project
 from . import db as DatabaseService
@@ -14,6 +14,19 @@ except:
         from models.citizen_science.citizen_science_audit import CitizenScienceAudit
     except:
         pass
+
+def rollback_audit_record(rollback):
+    try:
+        db = DatabaseService.get_db_connection()
+        stmt = delete(CitizenScienceAudit).where(CitizenScienceAudit.cit_sci_audit_id == rollback.primaryKey)
+        db.execute(stmt)
+        db.commit()
+    except Exception as e:
+        logger.log_text(e.__str__())
+        return False
+    
+    db.close()
+    return True
 
 def fetch_audit_records(vendor_project_id):
     try:

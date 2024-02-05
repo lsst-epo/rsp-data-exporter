@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from google.cloud import logging
 from . import db as DatabaseService
 
@@ -15,12 +15,24 @@ logging_client = logging.Client()
 log_name = "rsp-data-exporter.owner_service"
 logger = logging_client.logger(log_name)
 
+def rollback_owner_record(rollback):
+    try:
+        db = DatabaseService.get_db_connection()
+        stmt = delete(CitizenScienceOwners).where(CitizenScienceOwners.cit_sci_owner_id == rollback.primaryKey)
+        db.execute(stmt)
+        db.commit()
+    except Exception as e:
+        logger.log_text(e.__str__())
+        return False
+    
+    db.close()
+    return True
+
 def create_new_owner_record(email):
     owner_id = None;
     messages = []
 
     try:
-        logger.log_text("about to insert new owner record")
         db = DatabaseService.get_db_connection()
         citizen_science_owner_record = CitizenScienceOwners(email=email, status='ACTIVE')
         db.add(citizen_science_owner_record)
