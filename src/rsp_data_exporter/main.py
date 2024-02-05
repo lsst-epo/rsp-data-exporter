@@ -387,7 +387,7 @@ def check_batch_status(project_id, vendor_project_id):
         validator.error = True
         response.status = "error"
         response.messages.append(messages)
-    return
+    return messages
 
 def create_new_project_record(owner_id, vendor_project_id):
     global validator, response, debug
