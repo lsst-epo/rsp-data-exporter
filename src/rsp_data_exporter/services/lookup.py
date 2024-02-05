@@ -51,7 +51,7 @@ def insert_lookup_records(meta_records, project_id, batch_id):
         db.rollback()
         logger.log_text("An exception occurred while trying to insert lookup record!!")
         logger.log_text(e.__str__())
-        return False
+        return []
     
     db.commit()
     db.close()

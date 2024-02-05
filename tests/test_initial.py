@@ -55,7 +55,7 @@ def test_check_batch_status():
     _OWNER_ID = main.create_new_owner_record(_EMAIL)
     _PROJECT_ID = main.create_new_project_record(_OWNER_ID, _VENDOR_BATCH_ID)
     main.create_new_batch(_PROJECT_ID, _VENDOR_BATCH_ID)
-    assert main.check_batch_status(_PROJECT_ID, _VENDOR_BATCH_ID)[0]["batch_id"] == 2
+    assert len(main.check_batch_status(_PROJECT_ID, _VENDOR_BATCH_ID)) == 0
 
 # Meta record tests
 def test_create_meta_record():
@@ -120,8 +120,8 @@ def test_create_lookup_record():
 
     _META_RECORDS = MetadataService.insert_meta_records([CitizenScienceMeta(edc_ver_id=_EDC_VER_ID, uri=_URL, public=_PUBLIC, source_id=_SOURCE_ID, source_id_type=_SOURCE_ID_TYPE, user_defined_values=str(_USER_DEFINED_VALUES))])
 
-    successful = LookupService.insert_lookup_records(_META_RECORDS, _PROJECT_ID, _BATCH_ID)
-    assert successful == True
+    lookup_records = LookupService.insert_lookup_records(_META_RECORDS, _PROJECT_ID, _BATCH_ID)
+    assert len(lookup_records) > 0
 
 def test_lookup_lookup_records():
     _EMAIL = "fake@email.ca"

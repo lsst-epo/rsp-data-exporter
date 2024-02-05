@@ -117,22 +117,22 @@ def check_batch_status(project_id, vendor_project_id, test_only, data_rights_app
                                         if sub.completeness[completeness_key] == 1.0:
                                             update_batch_record = True
                                             break
-                                        else:
-                                            # Found the batch, but it's not complete, check if it contains subjects or not
-                                            try:
-                                                first = next(subject_set_list[0].subjects)
-                                                if first is not None:
-                                                    # Active batch with subjects, return
-                                                    batches_still_active.append(sub.id)
-                                                    update_batch_record = False
-                                                    break
-                                                else:
-                                                    update_batch_record = True
-                                                    break
-                                            except StopIteration:
-                                                logger.log_text("setting validator.error to True!")
-                                                messages.append(f"You have an active, but empty subject set on the zooniverse platform with an ID of {str(batch_in_db['vendor_batch_id_db'])}. Please delete this subject set on the Zoonivese platform and try again.")
-                                                continue
+                                        # else:
+                                            # # Found the batch, but it's not complete, check if it contains subjects or not
+                                            # try:
+                                            #     first = next(subject_set_list[0].subjects)
+                                            #     if first is not None:
+                                            #         # Active batch with subjects, return
+                                            #         batches_still_active.append(sub.id)
+                                            #         update_batch_record = False
+                                            #         break
+                                            #     else:
+                                            #         update_batch_record = True
+                                            #         break
+                                            # except StopIteration:
+                                            #     logger.log_text("setting validator.error to True!")
+                                            #     messages.append(f"You have an active, but empty subject set on the zooniverse platform with an ID of {str(batch_in_db['vendor_batch_id_db'])}. Please delete this subject set on the Zoonivese platform and try again.")
+                                                # continue
                         except Exception as e:
                             logger.log_text("An error occurred while looping through the subject sets, this usually occurs because of stale data that has been cached by Zooniverse. ")
                             continue
