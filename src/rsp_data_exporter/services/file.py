@@ -1,4 +1,4 @@
-import os, csv, shutil, glob, threading
+import os, csv, shutil, glob, concurrent.futures
 from google.cloud import logging
 from google.cloud import storage
 import numpy as np
@@ -74,24 +74,27 @@ def download_zip(bucket_name, filename, guid, data_rights_approved, is_tabular_d
 
 def upload_cutouts(cutouts):
     if len(cutouts) > 500: # Arbitrary threshold for threading
+        logger.log_text("In threading logic!!")
         subset_count = round(len(np.array(cutouts)) / 250)
         sub_cutouts_arr = np.split(np.array(cutouts), subset_count) # create sub arrays divided by 1k cutouts
-        threads = []
-        for i, sub_arr in enumerate(sub_cutouts_arr):
-            t = threading.Thread(target=upload_cutout_arr, args=(sub_arr,str(i),))
-            threads.append(t)
-            threads[i].start()
-        
-        for thread in threads:
-            logger.log_text("joining thread!")
-            thread.join()
+        logger.log_text(f"Number of threads: {str(len(sub_cutouts_arr))}")
+        urls = []
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
+            # for i, sub_arr in enumerate(sub_cutouts_arr):
+            # urls += executor.submit(upload_cutout_arr, sub_arr, str(i)).result()
+            results_generator = executor.map(upload_cutout_arr, sub_cutouts_arr)
+            for res in results_generator:
+                urls += res
+
+        return urls
 
     else:
-        urls = upload_cutout_arr(cutouts, str(1))
+        urls = upload_cutout_arr(cutouts)
     
     return urls
  
-def upload_cutout_arr(cutouts, i):
+def upload_cutout_arr(cutouts):
     urls = []
     gcs = storage.Client()
     bucket = gcs.bucket(CLOUD_STORAGE_CIT_SCI_PUBLIC)
@@ -107,7 +110,5 @@ def upload_cutout_arr(cutouts, i):
         
         blob.upload_from_filename(cutout)
         urls.append(blob.public_url)
-
-    logger.log_text("finished uploading thread #" + i)
 
     return urls
