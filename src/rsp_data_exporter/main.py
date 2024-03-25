@@ -165,18 +165,21 @@ def download_image_data_and_process():
                     updated_meta_records = update_meta_records_with_user_values(meta_records)
                     
                     if validator.error is False: 
-                        meta_records_with_id = insert_meta_records(updated_meta_records)
+                        # meta_records_with_id = insert_meta_records(updated_meta_records)
+                        insert_meta_records(updated_meta_records)
+
+                        # Inserting lookup records may not be necessary, assessing impact without lookup 
+                        # record insertion
+                        # if validator.error is False: 
+                        #     insert_lookup_records(meta_records_with_id, validator.project_id, validator.batch_id)
+                        response.status = "success"
+                        response.manifest_url = manifest_url
 
                         if validator.error is False: 
-                            insert_lookup_records(meta_records_with_id, validator.project_id, validator.batch_id)
-                            response.status = "success"
-                            response.manifest_url = manifest_url
+                            audit_records = insert_audit_records(vendor_project_id)
 
-                            if validator.error is False: 
-                                audit_records = insert_audit_records(vendor_project_id)
-
-                                if len(audit_records) < len(validator.mapped_manifest):
-                                    response.messages.append("Some audit records were not inserted!")
+                            if len(audit_records) < len(validator.mapped_manifest):
+                                response.messages.append("Some audit records were not inserted!")
     else:
         response.status = "error"
         if response.messages == None or len(response.messages) == 0:
@@ -273,8 +276,6 @@ def download_zip(bucket_name, filename, guid, data_rights_approved, is_tabular_d
     cutouts, messages = FileService.download_zip(bucket_name, filename, guid, data_rights_approved, is_tabular_dataset)
     time_mark(debug, "Grabbing cutouts finished...")
     if len(messages) > 0:
-        validator.error = True
-        response.status = "error"
         response.messages.append(messages)
     return cutouts
 
