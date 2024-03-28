@@ -131,7 +131,6 @@ def build_and_upload_manifest(urls, bucket, batch_id, guid = ""):
                 if "location:image_0" in row and "location:image_1" in row: # has two images at a minimum
                     has_flipbook_columns = True
                     location_cols = filter(lambda col: ("location:" in col), column_names)
-
                 else:
                     # Add URL column header
                     column_names.append("location:1")
@@ -152,9 +151,6 @@ def build_and_upload_manifest(urls, bucket, batch_id, guid = ""):
                         obj_id_idx = column_names.index(f"objectId:image_{obj_id_col_num}")
                         cutout_metadata[filename]["objectId"] = row[obj_id_idx]
                         cutout_metadata[filename]["objectIdType"] = "DIRECT"
-                        # EDC ver ID
-                        # edc_ver_id = round(time.time() * 1000) + 1
-                        # cutout_metadata[filename]["external_id"] = edc_ver_id
 
                     for c_idx, col in enumerate(row):
                         if "location:image_" not in column_names[c_idx] and "objectId:image_" not in column_names[c_idx]:
@@ -174,16 +170,11 @@ def build_and_upload_manifest(urls, bucket, batch_id, guid = ""):
                 filename_idx = column_names.index("filename")
                 filename = row[filename_idx]
 
-                manifest_metadata = {}
                 for c_idx, col in enumerate(row):
                     metadata[column_names[c_idx]] = col
-                
-                # Add the edc_ver_id
-                manifest_metadata["edc_ver_id"] = edc_ver_id
-                # edc_ver_id += 1
 
                 # Map metadata row to filename key
-                upload_manifest[filename] = manifest_metadata
+                upload_manifest[filename] = metadata
 
     # loop over urls
     if has_flipbook_columns == True:
@@ -209,7 +200,8 @@ def build_and_upload_manifest(urls, bucket, batch_id, guid = ""):
                 if has_flipbook_columns == True:
                     for col in column_names:
                         if "location:image_" in col:
-                            csv_row[col] = f"{'/'.join(url_list)}/{csv_row[col]}"
+                            csv_url = f"{'/'.join(url_list)}/{csv_row[col]}"
+                            csv_row[col] = csv_url
                             obj_id_col_num = col.replace("location:image_", "")
                             csv_row["objectId"] = upload_manifest[filename][f"objectId:image_{obj_id_col_num}"]
                             csv_row["objectIdType"] = "DIRECT"

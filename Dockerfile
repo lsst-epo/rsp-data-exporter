@@ -5,7 +5,7 @@ WORKDIR /app
 COPY . .
 
 ENV PORT=8080
-# RUN apt-get update && apt-get -qq install vim # For debug purposes
+RUN apt-get update && apt-get -qq install vim
 
 RUN pip3 install --upgrade pip setuptools
 RUN python3 -m pip install --no-cache-dir -r requirements.txt

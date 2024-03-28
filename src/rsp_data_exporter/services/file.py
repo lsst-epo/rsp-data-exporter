@@ -1,4 +1,4 @@
-import os, csv, shutil, glob, concurrent.futures
+import os, csv, shutil, glob, concurrent.futures, time
 from google.cloud import logging
 from google.cloud import storage
 import numpy as np
@@ -29,7 +29,13 @@ def download_zip(bucket_name, filename, guid, data_rights_approved, is_tabular_d
     logger.log_text("filename to download: " + filename)
     blob = bucket.blob(filename)
     zipped_cutouts = f"/tmp/{filename}"
+
+    # Beginning of debug testing
+    before_download = time.time() # debug
     blob.download_to_filename(zipped_cutouts)
+    after_download = time.time() # debug
+    download_time = after_download - before_download # debug
+    logger.log_text(f"Total download time: {str(download_time)}") # debug
 
     unzipped_cutouts_dir = f"/tmp/{guid}"
 
@@ -78,11 +84,17 @@ def upload_cutouts(cutouts):
         subset_count = round(len(np.array(cutouts)) / 250)
         sub_cutouts_arr = np.array_split(np.array(cutouts), subset_count) # create sub arrays divided by 1k cutouts
         urls = []
-
+        
+        # Beginning of debug testing
+        before_threaded_upload = time.time() # debug
         with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
             results_generator = executor.map(upload_cutout_arr, sub_cutouts_arr)
             for res in results_generator:
                 urls += res
+
+        after_threaded_upload = time.time() # debug
+        download_time = after_threaded_upload - before_threaded_upload # debug
+        logger.log_text(f"Total threaded upload time: {str(download_time)}") # debug
 
         return urls
 
