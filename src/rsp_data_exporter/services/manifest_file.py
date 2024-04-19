@@ -54,15 +54,17 @@ def update_meta_records_with_user_values(meta_records, mapped_manifest):
         filename = record.uri[record.uri.rfind("/") + 1:]
         try:
             if filename in mapped_manifest:
-                user_defined_data = mapped_manifest[filename]
-                # edc_ver_id = mapped_manifest[filename]["external_id"]
+                user_defined_data = mapped_manifest[filename]["user_defined_values"]
                 edc_ver_id = mapped_manifest[filename]["edc_ver_id"]
 
+                source_id_type = "objectId"
                 object_id = None
-                if "objectId" in mapped_manifest[filename]:
+                source_id = None
+                if any(key.startswith("objectId") for key in mapped_manifest[filename]):
                     object_id = mapped_manifest[filename]["objectId"]
-                elif "diaObjectId" in mapped_manifest[filename]:
-                    object_id = mapped_manifest[filename]["diaIbjectId"]
+                elif any(key.startswith("diaObjectId") for key in mapped_manifest[filename]):
+                    source_id_type = "diaObjectId"
+                    source_id = mapped_manifest[filename]["diaIbjectId"]
 
                 object_id_type = None
                 if "objectIdType" in mapped_manifest[filename]:
@@ -82,7 +84,6 @@ def update_meta_records_with_user_values(meta_records, mapped_manifest):
                     
                 if "filename" in user_defined_data:
                     del user_defined_data["filename"]
-                # del user_defined_data["external_id"]
 
                 # The only valid values for objectIdType are DIRECT and INDIRECT, so set all
                 # values to INDIRECT if the come in the request as neither
@@ -91,7 +92,7 @@ def update_meta_records_with_user_values(meta_records, mapped_manifest):
                     info_message = "You sent a manifest file with at least one objectIdType value that was neither 'DIRECT' or 'INDIRECT' (the only values allowed for object ID type). The value was automatically replaced with a value of 'INDIRECT'."
                     logged_obj_type_msg = True
 
-                record.set_fields(edc_ver_id=edc_ver_id, object_id=object_id, object_id_type=object_id_type, user_defined_values=str(user_defined_data), ra=ra, dec=dec)
+                record.set_fields(edc_ver_id=edc_ver_id, object_id=object_id, object_id_type=object_id_type, source_id=source_id, source_id_type=source_id_type, user_defined_values=str(user_defined_data), ra=ra, dec=dec)
             else:
                 logger.log_text(f"SKIPPING: {filename} in update_meta_records_with_user_values() due to not being a key in the mapped_manifest!!")
         except Exception as e:
@@ -131,26 +132,24 @@ def build_and_upload_manifest_for_flipbook(urls, bucket, batch_id, guid):
         edc_ver_id = round(time.time() * 1000) 
         csv_rows = enumerate(csv_reader)
         column_names = next(csv_rows)[1]
+        column_names.append("edc_ver_id")
         upload_manifest.append(column_names)
         location_cols = filter(lambda col: ("location:" in col), column_names)
 
         for idx, row in csv_rows:
-            metadata = {}
-            metadata["edc_ver_id"] = edc_ver_id
-            edc_ver_id += 1
+            
             updated_csv_row = row
-            print(updated_csv_row)
             
             for idx_l, loc in enumerate(location_cols):
                 filename_idx = column_names.index(loc)
                 filename = row[filename_idx].split("/").pop()
                 mapped_manifest[filename] = {}
-                
 
                 url_idx = [n for n, x in enumerate(urls) if filename in x]
                 url = urls[url_idx[0]]
                 mapped_manifest[filename].update(dict(zip(column_names, row)))
                 mapped_manifest[filename][f"location:image_{str(idx_l)}"] = url
+                mapped_manifest[filename]["edc_ver_id"] = edc_ver_id
 
                 # Clean up dict
                 mapped_manifest[filename].pop('filename', None)
@@ -168,7 +167,9 @@ def build_and_upload_manifest_for_flipbook(urls, bucket, batch_id, guid):
 
                 # Now sort out the manifest to-be uploaded
                 updated_csv_row[filename_idx] = url
+                updated_csv_row.append(edc_ver_id)
             upload_manifest.append(updated_csv_row)
+            edc_ver_id += 1
 
     with open(f"/tmp/{guid}/manifest.csv", 'w', newline='') as csvfile:
         for m_row in upload_manifest:
