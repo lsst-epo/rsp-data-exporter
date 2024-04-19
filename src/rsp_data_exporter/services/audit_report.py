@@ -49,8 +49,11 @@ def insert_audit_records(vendor_project_id, mapped_manifest, owner_id):
     object_ids = []
     for key in mapped_manifest:
         if "objectId" in mapped_manifest[key]:
-
             object_id = mapped_manifest[key]["objectId"]
+            object_ids.append(object_id)
+            audit_records.append(CitizenScienceAudit(object_id=object_id, cit_sci_owner_id=owner_id, vendor_project_id=vendor_project_id))
+        elif "diaObjectID" in mapped_manifest[key]:
+            object_id = mapped_manifest[key]["diaObjectID"]
             object_ids.append(object_id)
             audit_records.append(CitizenScienceAudit(object_id=object_id, cit_sci_owner_id=owner_id, vendor_project_id=vendor_project_id))
 
