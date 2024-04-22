@@ -146,6 +146,13 @@ def download_image_data_and_process():
     validator = CitizenScienceValidator()
     urls = []
 
+    # Debug code
+    if request.args.get("flipbook") is not None:
+        logger.log_text(f"flipbook: {request.args.get('flipbook')}")
+        contains_flipbook = bool(request.args.get("flipbook"))
+        
+    # End of debug code
+
     time_mark(debug, __name__)
 
     validate_project_metadata(email, vendor_project_id, vendor_batch_id) 
@@ -159,7 +166,7 @@ def download_image_data_and_process():
             meta_records = MetadataService.create_meta_records(urls)
 
             if validator.error is False:                
-                manifest_url = build_and_upload_manifest(urls, CLOUD_STORAGE_CIT_SCI_PUBLIC, guid)
+                manifest_url = build_and_upload_manifest(urls, CLOUD_STORAGE_CIT_SCI_PUBLIC, guid, contains_flipbook)
 
                 if validator.error is False:  
                     updated_meta_records = update_meta_records_with_user_values(meta_records)
@@ -258,10 +265,10 @@ def insert_audit_records(vendor_project_id):
     return audit_records
 
 def update_meta_records_with_user_values(meta_records):
-    user_defined_values, info_message = ManifestFileService.update_meta_records_with_user_values(meta_records, validator.mapped_manifest)
+    updated_meta_records, info_message = ManifestFileService.update_meta_records_with_user_values(meta_records, validator.mapped_manifest)
     if info_message != "":
         response.messages.append(info_message)
-    return user_defined_values
+    return updated_meta_records
 
 def upload_cutouts(cutouts):
     global debug
@@ -294,9 +301,9 @@ def transfer_tabular_manifest(bucket, guid):
     ManifestFileService.update_batch_record_with_manifest_url(manifestBlob.public_url)
     return manifestBlob.public_url
 
-def build_and_upload_manifest(urls, bucket, guid = ""):
+def build_and_upload_manifest(urls, bucket, guid = "", flipbook = False):
     time_mark(debug, "In build and upload manifest")
-    manifest_url, mapped_manifest = ManifestFileService.build_and_upload_manifest(urls, bucket, validator.batch_id, guid)
+    manifest_url, mapped_manifest = ManifestFileService.build_and_upload_manifest(urls, bucket, validator.batch_id, guid, flipbook)
     validator.mapped_manifest = mapped_manifest
     return manifest_url
 

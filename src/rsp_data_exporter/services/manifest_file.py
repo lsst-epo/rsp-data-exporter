@@ -54,33 +54,39 @@ def update_meta_records_with_user_values(meta_records, mapped_manifest):
         filename = record.uri[record.uri.rfind("/") + 1:]
         try:
             if filename in mapped_manifest:
-                user_defined_data = mapped_manifest[filename]
-                # edc_ver_id = mapped_manifest[filename]["external_id"]
+                user_defined_data = mapped_manifest[filename]["user_defined_values"]
                 edc_ver_id = mapped_manifest[filename]["edc_ver_id"]
 
+                source_id_type = "objectId"
                 object_id = None
-                if "objectId" in mapped_manifest[filename]:
+                source_id = None
+                if any(key.startswith("diaObjectId") for key in mapped_manifest[filename]):
+                    source_id_type = "diaObjectId"
+                    source_id = mapped_manifest[filename]["diaObjectId"]
+                elif any(key.startswith("objectId") for key in mapped_manifest[filename]):
                     object_id = mapped_manifest[filename]["objectId"]
 
                 object_id_type = None
                 if "objectIdType" in mapped_manifest[filename]:
                     object_id_type = mapped_manifest[filename]["objectIdType"]
                     object_id_type = object_id_type.upper()
-                    del user_defined_data["objectIdType"]
+                    if "objectIdType" in user_defined_data:
+                        del user_defined_data["objectIdType"]
 
                 ra = None
                 if "coord_ra" in mapped_manifest[filename]:
                     ra = mapped_manifest[filename]["coord_ra"]
-                    del user_defined_data["coord_ra"]
+                    if "coord_ra" in user_defined_data:
+                        del user_defined_data["coord_ra"]
 
                 dec = None
                 if "coord_dec" in mapped_manifest[filename]:
                     dec = mapped_manifest[filename]["coord_dec"]
-                    del user_defined_data["coord_dec"]
+                    if "coord_dec" in user_defined_data:
+                        del user_defined_data["coord_dec"]
                     
                 if "filename" in user_defined_data:
                     del user_defined_data["filename"]
-                # del user_defined_data["external_id"]
 
                 # The only valid values for objectIdType are DIRECT and INDIRECT, so set all
                 # values to INDIRECT if the come in the request as neither
@@ -89,7 +95,7 @@ def update_meta_records_with_user_values(meta_records, mapped_manifest):
                     info_message = "You sent a manifest file with at least one objectIdType value that was neither 'DIRECT' or 'INDIRECT' (the only values allowed for object ID type). The value was automatically replaced with a value of 'INDIRECT'."
                     logged_obj_type_msg = True
 
-                record.set_fields(edc_ver_id=edc_ver_id, object_id=object_id, object_id_type=object_id_type, user_defined_values=str(user_defined_data), ra=ra, dec=dec)
+                record.set_fields(edc_ver_id=edc_ver_id, object_id=object_id, object_id_type=object_id_type, source_id=source_id, source_id_type=source_id_type, user_defined_values=str(user_defined_data), ra=ra, dec=dec)
             else:
                 logger.log_text(f"SKIPPING: {filename} in update_meta_records_with_user_values() due to not being a key in the mapped_manifest!!")
         except Exception as e:
@@ -98,7 +104,15 @@ def update_meta_records_with_user_values(meta_records, mapped_manifest):
 
     return meta_records, info_message
 
-def build_and_upload_manifest(urls, bucket, batch_id, guid = ""):
+def build_and_upload_manifest(urls, bucket, batch_id, guid = "", flipbook = False):
+
+    if flipbook == True:
+        logger.log_text("about to process flipbook manifest file")
+        return build_and_upload_manifest_for_flipbook(urls, bucket, batch_id, guid )
+    else:
+        return build_and_upload_manifest_for_static_cutouts(urls, bucket, batch_id, guid)
+
+def build_and_upload_manifest_for_flipbook(urls, bucket, batch_id, guid):
     # Create a Cloud Storage client.
     gcs = storage.Client()
 
@@ -107,114 +121,136 @@ def build_and_upload_manifest(urls, bucket, batch_id, guid = ""):
 
     # list to store the names of columns
     column_names = []
-    cutout_metadata = {}
-    upload_manifest = {}
+    mapped_manifest = {}
+    upload_manifest = []
     filename_idx = None
     location_cols = []
+    canonical_cols = ["objectId", "diaObjectId", "objectIdType", "diaObjectIdType", "edc_ver_id"]
 
     # Read the manifest that came from the RSP and store it in a dict with 
     # the filename as the key
     with open(f"/tmp/{guid}/manifest.csv", 'r') as csv_file:
         csv_reader = csv.reader(csv_file, delimiter = ',')
-        has_flipbook_columns = False # by default
-    
+
         # loop to iterate through the rows of csv
         edc_ver_id = round(time.time() * 1000) 
-        for idx, row in enumerate(csv_reader):
-            if idx == 0:
-                # adding the first row
-                column_names += row
-                
-                # Add edc_ver_id as external_id column header
-                column_names.append("external_id")
+        csv_rows = enumerate(csv_reader)
+        column_names = next(csv_rows)[1]
+        column_names.append("external_id")
+        upload_manifest.append(column_names)
+        location_cols = filter(lambda col: ("location:" in col), column_names)
 
-                if "location:image_0" in row and "location:image_1" in row: # has two images at a minimum
-                    has_flipbook_columns = True
-                    location_cols = filter(lambda col: ("location:" in col), column_names)
-                else:
-                    # Add URL column header
-                    column_names.append("location:1")
-                    filename_idx = column_names.index("filename")
-            else:
-                metadata = {}
-                metadata["edc_ver_id"] = edc_ver_id
-                edc_ver_id += 1
-                if has_flipbook_columns == True:
-                    for loc in location_cols:
-                        # filename
-                        filename_idx = column_names.index(loc)
-                        filename = row[filename_idx].split("/").pop()
-                        cutout_metadata[filename] = {}
-                        cutout_metadata[filename]["location:1"] = row[filename_idx]
-                        # object ID
-                        obj_id_col_num = loc.replace("location:image_", "")
-                        obj_id_idx = column_names.index(f"objectId:image_{obj_id_col_num}")
-                        cutout_metadata[filename]["objectId"] = row[obj_id_idx]
-                        cutout_metadata[filename]["objectIdType"] = "DIRECT"
+        for idx, row in csv_rows:
+            
+            updated_csv_row = row
+            
+            for idx_l, loc in enumerate(location_cols):
+                filename_idx = column_names.index(loc)
+                filename = row[filename_idx].split("/").pop()
+                mapped_manifest[filename] = {}
+                location_suffix = loc.removeprefix('location:image_')
 
-                    for c_idx, col in enumerate(row):
-                        if "location:image_" not in column_names[c_idx] and "objectId:image_" not in column_names[c_idx]:
-                            cutout_metadata[filename][column_names[c_idx]] = col
-                else:
-                    # Set new key for row
-                    filename = row[filename_idx]
+                url_idx = [n for n, x in enumerate(urls) if filename in x]
+                url = urls[url_idx[0]]
+                mapped_manifest[filename].update(dict(zip(column_names, row)))
+                mapped_manifest[filename][f"location:image_{str(idx_l)}"] = url
+                mapped_manifest[filename]["edc_ver_id"] = edc_ver_id
+                # mapped_manifest[filename].pop("external_id")
 
-                    metadata = {}
-                    for m_idx, col in enumerate(row):
-                        metadata[column_names[m_idx]] = col
-                    
-                    # Map metadata row to filename key
-                    metadata["edc_ver_id"] = edc_ver_id
-                    cutout_metadata[filename] = metadata
+                # Clean up dict
+                mapped_manifest[filename].pop('filename', None)
+                mapped_manifest[filename].pop('location:1', None)
 
-                filename_idx = column_names.index("filename")
-                filename = row[filename_idx]
+                # object ID / dia object ID
+                if f"objectId:image_{location_suffix}" in column_names:
+                    mapped_manifest[filename]["objectId"] = mapped_manifest[filename][f"objectId:image_{location_suffix}"]
+                    mapped_manifest[filename]["objectIdType"] = "DIRECT"
+                if f"diaObjectId:image_{location_suffix}" in column_names:
+                    mapped_manifest[filename]["objectId"] = mapped_manifest[filename][f"diaObjectId:image_{location_suffix}"]
+                    mapped_manifest[filename]["objectIdType"] = "INDIRECT"
 
-                for c_idx, col in enumerate(row):
-                    metadata[column_names[c_idx]] = col
+                # User defined values
+                user_defined_values = dict(filter(lambda e:(e[0] not in canonical_cols and "location:image_" not in e[0] and "objectId:image_" not in e[0] and "diaObjectId:image_" not in e[0]), mapped_manifest[filename].items())) 
+                mapped_manifest[filename]["user_defined_values"] = user_defined_values
 
-                # Map metadata row to filename key
-                upload_manifest[filename] = metadata
+                # Now sort out the manifest to-be uploaded
+                updated_csv_row[filename_idx] = url
+            updated_csv_row.append(edc_ver_id)
+            upload_manifest.append(updated_csv_row)
+            edc_ver_id += 1
 
-    # loop over urls
-    if has_flipbook_columns == True:
-        column_names.remove("filename")
-        if "objectId" not in column_names:
-            column_names.append("objectId")
-        if "objectIdType" not in column_names:
-            column_names.append("objectIdType")
 
     with open(f"/tmp/{guid}/manifest.csv", 'w', newline='') as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=column_names)
-        writer.writeheader()
-
-        for url in urls:
-            url_list = url.split("/")
-            filename = url_list.pop()
-
-            if filename in upload_manifest:
-                csv_row = upload_manifest[filename]
-                csv_row["external_id"] = upload_manifest[filename]["edc_ver_id"]
-                csv_row.pop("edc_ver_id")
-                
-                if has_flipbook_columns == True:
-                    for col in column_names:
-                        if "location:image_" in col:
-                            csv_url = f"{'/'.join(url_list)}/{csv_row[col]}"
-                            csv_row[col] = csv_url
-                            obj_id_col_num = col.replace("location:image_", "")
-                            csv_row["objectId"] = upload_manifest[filename][f"objectId:image_{obj_id_col_num}"]
-                            csv_row["objectIdType"] = "DIRECT"
-                    del csv_row["filename"]
-                else:
-                    csv_row["location:1"] = url
-
-                writer.writerow(csv_row)
+        for m_row in upload_manifest:
+            writer = csv.writer(csvfile, quoting=csv.QUOTE_ALL)
+            writer.writerow(m_row)
 
     manifestBlob = bucket.blob(f"{guid}/manifest.csv")
     manifestBlob.upload_from_filename(f"/tmp/{guid}/manifest.csv")
     update_batch_record_with_manifest_url(manifestBlob.public_url, batch_id)
-    return manifestBlob.public_url, cutout_metadata
+
+    return manifestBlob.public_url, mapped_manifest
+
+def build_and_upload_manifest_for_static_cutouts(urls, bucket, batch_id, guid):
+    # Create a Cloud Storage client.
+    gcs = storage.Client()
+
+    # Get the bucket that the file will be uploaded to.
+    bucket = gcs.bucket(bucket)
+
+    # list to store the names of columns
+    column_names = []
+    mapped_manifest = {}
+    upload_manifest = []
+    filename_idx = None
+    canonical_cols = ["objectId", "diaObjectId", "objectIdType", "diaObjectIdType", "edc_ver_id"]
+
+    # Read the manifest that came from the RSP and store it in a dict with 
+    # the filename as the key
+    with open(f"/tmp/{guid}/manifest.csv", 'r') as csv_file:
+        csv_reader = csv.reader(csv_file, delimiter = ',')
+
+        # loop to iterate through the rows of csv
+        edc_ver_id = round(time.time() * 1000)
+        csv_rows = enumerate(csv_reader)
+        column_names = next(csv_rows)[1]
+        column_names.append("location:1")
+        column_names.append("external_id")
+        filename_idx = column_names.index("filename")
+        upload_manifest.append(column_names)
+
+        for idx, row in csv_rows:
+            # Set new key for row
+            filename = row[filename_idx]
+            url_idx = [n for n, x in enumerate(urls) if filename in x]
+            url = urls[url_idx[0]]
+            
+            mf_dict = dict(zip(column_names, row))
+            mf_dict["edc_ver_id"] = edc_ver_id
+            mf_dict["location:1"] = url
+            
+            mf_row = row
+            mf_row.append(url)
+            mf_row.append(edc_ver_id)
+            mapped_manifest[filename] = mf_dict
+            # mapped_manifest[filename].pop("external_id")
+            upload_manifest.append(mf_row)
+                        
+            # User defined values
+            user_defined_values = dict(filter(lambda e:(e[0] not in canonical_cols and "location:image_" not in e[0] and "objectId:image_" not in e[0] and "diaObjectId:image_" not in e[0]), mapped_manifest[filename].items())) 
+            mapped_manifest[filename]["user_defined_values"] = user_defined_values
+
+            edc_ver_id += 1
+
+    with open(f"/tmp/{guid}/manifest.csv", 'w', newline='') as csvfile:
+        for m_row in upload_manifest:
+            writer = csv.writer(csvfile, quoting=csv.QUOTE_ALL)
+            writer.writerow(m_row)
+
+    manifestBlob = bucket.blob(f"{guid}/manifest.csv")
+    manifestBlob.upload_from_filename(f"/tmp/{guid}/manifest.csv")
+    update_batch_record_with_manifest_url(manifestBlob.public_url, batch_id)
+    return manifestBlob.public_url, mapped_manifest
 
 def upload_manifest(csv_path):
     gcs = storage.Client()
