@@ -265,7 +265,7 @@ def insert_audit_records(vendor_project_id):
     return audit_records
 
 def update_meta_records_with_user_values(meta_records):
-    updated_meta_records, info_message = ManifestFileService.update_meta_records_with_user_values(meta_records, validator.mapped_manifest, flipbook)
+    updated_meta_records, info_message = ManifestFileService.update_meta_records_with_user_values(meta_records, validator.mapped_manifest)
     if info_message != "":
         response.messages.append(info_message)
     return updated_meta_records

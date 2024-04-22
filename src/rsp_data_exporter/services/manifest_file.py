@@ -60,27 +60,30 @@ def update_meta_records_with_user_values(meta_records, mapped_manifest):
                 source_id_type = "objectId"
                 object_id = None
                 source_id = None
-                if any(key.startswith("objectId") for key in mapped_manifest[filename]):
-                    object_id = mapped_manifest[filename]["objectId"]
-                elif any(key.startswith("diaObjectId") for key in mapped_manifest[filename]):
+                if any(key.startswith("diaObjectId") for key in mapped_manifest[filename]):
                     source_id_type = "diaObjectId"
-                    source_id = mapped_manifest[filename]["diaIbjectId"]
+                    source_id = mapped_manifest[filename]["diaObjectId"]
+                elif any(key.startswith("objectId") for key in mapped_manifest[filename]):
+                    object_id = mapped_manifest[filename]["objectId"]
 
                 object_id_type = None
                 if "objectIdType" in mapped_manifest[filename]:
                     object_id_type = mapped_manifest[filename]["objectIdType"]
                     object_id_type = object_id_type.upper()
-                    del user_defined_data["objectIdType"]
+                    if "objectIdType" in user_defined_data:
+                        del user_defined_data["objectIdType"]
 
                 ra = None
                 if "coord_ra" in mapped_manifest[filename]:
                     ra = mapped_manifest[filename]["coord_ra"]
-                    del user_defined_data["coord_ra"]
+                    if "coord_ra" in user_defined_data:
+                        del user_defined_data["coord_ra"]
 
                 dec = None
                 if "coord_dec" in mapped_manifest[filename]:
                     dec = mapped_manifest[filename]["coord_dec"]
-                    del user_defined_data["coord_dec"]
+                    if "coord_dec" in user_defined_data:
+                        del user_defined_data["coord_dec"]
                     
                 if "filename" in user_defined_data:
                     del user_defined_data["filename"]
@@ -168,8 +171,6 @@ def build_and_upload_manifest_for_flipbook(urls, bucket, batch_id, guid):
 
                 # User defined values
                 user_defined_values = dict(filter(lambda e:(e[0] not in canonical_cols and "location:image_" not in e[0] and "objectId:image_" not in e[0] and "diaObjectId:image_" not in e[0]), mapped_manifest[filename].items())) 
-                logger.log_text("logging user_defined_values:")
-                logger.log_text(str(user_defined_values))
                 mapped_manifest[filename]["user_defined_values"] = user_defined_values
 
                 # Now sort out the manifest to-be uploaded
@@ -187,9 +188,6 @@ def build_and_upload_manifest_for_flipbook(urls, bucket, batch_id, guid):
     manifestBlob = bucket.blob(f"{guid}/manifest.csv")
     manifestBlob.upload_from_filename(f"/tmp/{guid}/manifest.csv")
     update_batch_record_with_manifest_url(manifestBlob.public_url, batch_id)
-
-    logger.log_text("About to log mapped_manifest")
-    logger.log_text(str(mapped_manifest))
 
     return manifestBlob.public_url, mapped_manifest
 
