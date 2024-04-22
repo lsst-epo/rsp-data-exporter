@@ -148,7 +148,7 @@ def download_image_data_and_process():
 
     # Debug code
     if request.args.get("flipbook") is not None:
-        logger.log_text(f"flipbook: {request.args.get("flipbook")}")
+        logger.log_text(f"flipbook: {request.args.get('flipbook')}")
         contains_flipbook = bool(request.args.get("flipbook"))
         
     # End of debug code
@@ -166,7 +166,7 @@ def download_image_data_and_process():
             meta_records = MetadataService.create_meta_records(urls)
 
             if validator.error is False:                
-                manifest_url = build_and_upload_manifest(urls, CLOUD_STORAGE_CIT_SCI_PUBLIC, guid)
+                manifest_url = build_and_upload_manifest(urls, CLOUD_STORAGE_CIT_SCI_PUBLIC, guid, contains_flipbook)
 
                 if validator.error is False:  
                     updated_meta_records = update_meta_records_with_user_values(meta_records)
@@ -265,7 +265,7 @@ def insert_audit_records(vendor_project_id):
     return audit_records
 
 def update_meta_records_with_user_values(meta_records):
-    updated_meta_records, info_message = ManifestFileService.update_meta_records_with_user_values(meta_records, validator.mapped_manifest)
+    updated_meta_records, info_message = ManifestFileService.update_meta_records_with_user_values(meta_records, validator.mapped_manifest, flipbook)
     if info_message != "":
         response.messages.append(info_message)
     return updated_meta_records

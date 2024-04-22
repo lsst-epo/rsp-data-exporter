@@ -104,6 +104,7 @@ def update_meta_records_with_user_values(meta_records, mapped_manifest):
 def build_and_upload_manifest(urls, bucket, batch_id, guid = "", flipbook = False):
 
     if flipbook == True:
+        logger.log_text("about to process flipbook manifest file")
         return build_and_upload_manifest_for_flipbook(urls, bucket, batch_id, guid )
     else:
         return build_and_upload_manifest_for_static_cutouts(urls, bucket, batch_id, guid)
@@ -118,7 +119,7 @@ def build_and_upload_manifest_for_flipbook(urls, bucket, batch_id, guid):
     # list to store the names of columns
     column_names = []
     mapped_manifest = {}
-    upload_manifest = {}
+    upload_manifest = []
     filename_idx = None
     location_cols = []
     canonical_cols = ["objectId", "diaObjectId", "objectIdType", "diaObjectIdType", "edc_ver_id"]
@@ -132,7 +133,7 @@ def build_and_upload_manifest_for_flipbook(urls, bucket, batch_id, guid):
         edc_ver_id = round(time.time() * 1000) 
         csv_rows = enumerate(csv_reader)
         column_names = next(csv_rows)[1]
-        column_names.append("edc_ver_id")
+        column_names.append("external_id")
         upload_manifest.append(column_names)
         location_cols = filter(lambda col: ("location:" in col), column_names)
 
@@ -144,32 +145,39 @@ def build_and_upload_manifest_for_flipbook(urls, bucket, batch_id, guid):
                 filename_idx = column_names.index(loc)
                 filename = row[filename_idx].split("/").pop()
                 mapped_manifest[filename] = {}
+                location_suffix = loc.removeprefix('location:image_')
 
                 url_idx = [n for n, x in enumerate(urls) if filename in x]
                 url = urls[url_idx[0]]
                 mapped_manifest[filename].update(dict(zip(column_names, row)))
                 mapped_manifest[filename][f"location:image_{str(idx_l)}"] = url
                 mapped_manifest[filename]["edc_ver_id"] = edc_ver_id
+                # mapped_manifest[filename].pop("external_id")
 
                 # Clean up dict
                 mapped_manifest[filename].pop('filename', None)
                 mapped_manifest[filename].pop('location:1', None)
 
                 # object ID / dia object ID
-                if "objectId:image_0" in column_names:
+                if f"objectId:image_{location_suffix}" in column_names:
+                    mapped_manifest[filename]["objectId"] = mapped_manifest[filename][f"objectId:image_{location_suffix}"]
                     mapped_manifest[filename]["objectIdType"] = "DIRECT"
-                elif "diaObjectId:image_0" in column_names:
+                if f"diaObjectId:image_{location_suffix}" in column_names:
+                    mapped_manifest[filename]["objectId"] = mapped_manifest[filename][f"diaObjectId:image_{location_suffix}"]
                     mapped_manifest[filename]["objectIdType"] = "INDIRECT"
 
                 # User defined values
                 user_defined_values = dict(filter(lambda e:(e[0] not in canonical_cols and "location:image_" not in e[0] and "objectId:image_" not in e[0] and "diaObjectId:image_" not in e[0]), mapped_manifest[filename].items())) 
+                logger.log_text("logging user_defined_values:")
+                logger.log_text(str(user_defined_values))
                 mapped_manifest[filename]["user_defined_values"] = user_defined_values
 
                 # Now sort out the manifest to-be uploaded
                 updated_csv_row[filename_idx] = url
-                updated_csv_row.append(edc_ver_id)
+            updated_csv_row.append(edc_ver_id)
             upload_manifest.append(updated_csv_row)
             edc_ver_id += 1
+
 
     with open(f"/tmp/{guid}/manifest.csv", 'w', newline='') as csvfile:
         for m_row in upload_manifest:
@@ -179,6 +187,10 @@ def build_and_upload_manifest_for_flipbook(urls, bucket, batch_id, guid):
     manifestBlob = bucket.blob(f"{guid}/manifest.csv")
     manifestBlob.upload_from_filename(f"/tmp/{guid}/manifest.csv")
     update_batch_record_with_manifest_url(manifestBlob.public_url, batch_id)
+
+    logger.log_text("About to log mapped_manifest")
+    logger.log_text(str(mapped_manifest))
+
     return manifestBlob.public_url, mapped_manifest
 
 def build_and_upload_manifest_for_static_cutouts(urls, bucket, batch_id, guid):
@@ -194,7 +206,6 @@ def build_and_upload_manifest_for_static_cutouts(urls, bucket, batch_id, guid):
     upload_manifest = []
     filename_idx = None
     canonical_cols = ["objectId", "diaObjectId", "objectIdType", "diaObjectIdType", "edc_ver_id"]
-    urls = ["https://hosting.google.com/cutout1567965153859768169.png","https://hosting.google.com/cutout1650947495431285770.png","https://hosting.google.com/cutout1651448872733547971.png","https://hosting.google.com/cutout1651536833663756158.png","https://hosting.google.com/cutout1651325727431231924.png"]
 
     # Read the manifest that came from the RSP and store it in a dict with 
     # the filename as the key
@@ -206,7 +217,7 @@ def build_and_upload_manifest_for_static_cutouts(urls, bucket, batch_id, guid):
         csv_rows = enumerate(csv_reader)
         column_names = next(csv_rows)[1]
         column_names.append("location:1")
-        column_names.append("edc_ver_id")
+        column_names.append("external_id")
         filename_idx = column_names.index("filename")
         upload_manifest.append(column_names)
 
@@ -224,6 +235,7 @@ def build_and_upload_manifest_for_static_cutouts(urls, bucket, batch_id, guid):
             mf_row.append(url)
             mf_row.append(edc_ver_id)
             mapped_manifest[filename] = mf_dict
+            # mapped_manifest[filename].pop("external_id")
             upload_manifest.append(mf_row)
                         
             # User defined values
