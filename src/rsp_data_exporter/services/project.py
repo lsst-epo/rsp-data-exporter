@@ -34,6 +34,7 @@ def lookup_project_record(vendor_project_id):
     project_id = None
     status = None
     messages = []
+    data_rights_approved = False
 
     try:
         db = DatabaseService.get_db_connection()

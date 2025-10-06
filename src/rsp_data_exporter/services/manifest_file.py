@@ -105,8 +105,7 @@ def update_meta_records_with_user_values(meta_records, mapped_manifest):
     return meta_records, info_message
 
 def build_and_upload_manifest(urls, bucket, batch_id, guid = "", flipbook = False):
-
-    if flipbook == True:
+    if flipbook is True:
         logger.log_text("about to process flipbook manifest file")
         return build_and_upload_manifest_for_flipbook(urls, bucket, batch_id, guid )
     else:

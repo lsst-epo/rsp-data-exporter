@@ -146,12 +146,12 @@ def download_image_data_and_process():
     validator = CitizenScienceValidator()
     urls = []
 
-    # Debug code
     if request.args.get("flipbook") is not None:
-        logger.log_text(f"flipbook: {request.args.get('flipbook')}")
-        contains_flipbook = bool(request.args.get("flipbook"))
-        
-    # End of debug code
+        if request.args.get('flipbook') == "True":
+            contains_flipbook = True
+        else:
+            contains_flipbook = False
+    logger.log_text("flipbook after bool assignment:" + str(contains_flipbook))
 
     time_mark(debug, __name__)
 
@@ -165,7 +165,7 @@ def download_image_data_and_process():
             urls = upload_cutouts(cutouts)
             meta_records = MetadataService.create_meta_records(urls)
 
-            if validator.error is False:                
+            if validator.error is False:              
                 manifest_url = build_and_upload_manifest(urls, CLOUD_STORAGE_CIT_SCI_PUBLIC, guid, contains_flipbook)
 
                 if validator.error is False:  
@@ -225,7 +225,7 @@ def fetch_audit_records():
         logger.log_text("An exception occurred in fetch_audit_records!")
         logger.log_text(e.__str__())
         response = DataExporterResponse()
-        response.status = "ERROR"
+        # response.status = "ERROR"
         response.messages.append(f"An error occurred while looking up the audit records associated with Zooniverse project ID: {vendor_project_id}")
         return json.dumps(response.__dict__)
 
@@ -249,7 +249,7 @@ def insert_audit_records(vendor_project_id):
         logger.log_text("An exception occurred in insert_audit_records!")
         logger.log_text(e.__str__())
         response = DataExporterResponse()
-        response.status = "ERROR"
+        # response.status = "ERROR"
         response.messages.append(f"An error occurred while looking up the audit records associated with Zooniverse project ID: {vendor_project_id}")
         return json.dumps(response.__dict__)
     

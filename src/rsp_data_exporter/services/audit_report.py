@@ -16,8 +16,8 @@ except:
         pass
 
 def rollback_audit_record(rollback):
+    db = DatabaseService.get_db_connection()
     try:
-        db = DatabaseService.get_db_connection()
         stmt = delete(CitizenScienceAudit).where(CitizenScienceAudit.cit_sci_audit_id == rollback.primaryKey)
         db.execute(stmt)
         db.commit()
@@ -29,8 +29,8 @@ def rollback_audit_record(rollback):
     return True
 
 def fetch_audit_records(vendor_project_id):
+    db = DatabaseService.get_db_connection()
     try:
-        db = DatabaseService.get_db_connection()
         stmt = select(CitizenScienceAudit.object_id).where(CitizenScienceAudit.vendor_project_id == int(vendor_project_id))
         results = db.execute(stmt)
         db.close()
@@ -57,9 +57,9 @@ def insert_audit_records(vendor_project_id, mapped_manifest, owner_id):
             object_ids.append(object_id)
             audit_records.append(CitizenScienceAudit(object_id=object_id, cit_sci_owner_id=owner_id, vendor_project_id=vendor_project_id))
 
+    db = DatabaseService.get_db_connection()
     if len(audit_records) > 0:
         try:
-            db = DatabaseService.get_db_connection()
             db.bulk_save_objects(audit_records, return_defaults=True)
             db.flush()
         except Exception as e:
@@ -80,8 +80,8 @@ def insert_audit_records(vendor_project_id, mapped_manifest, owner_id):
     return audit_records, audit_messages
 
 def audit_object_ids(object_ids, vendor_project_id):
+    db = DatabaseService.get_db_connection()
     try:
-        db = DatabaseService.get_db_connection()
         stmt = select([CitizenScienceAudit.vendor_project_id, func.count(CitizenScienceAudit.object_id)]).where(CitizenScienceAudit.object_id.in_(object_ids)).group_by(CitizenScienceAudit.vendor_project_id).filter(CitizenScienceAudit.vendor_project_id != int(vendor_project_id))
         results = db.execute(stmt).fetchall() 
     except Exception as e:
