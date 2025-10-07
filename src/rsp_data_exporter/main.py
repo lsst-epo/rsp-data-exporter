@@ -109,16 +109,6 @@ def download_tabular_data_and_process():
     if validator.error is False:
         tabular_records = download_zip(CLOUD_STORAGE_BUCKET_HIPS2FITS , "manifest.csv", guid, validator.data_rights_approved, True)
         manifest_url = ManifestFileService.upload_manifest(f"/tmp/{guid}/manifest.csv")
-        # if data_format == "objects":
-        #     TabularDatService.create_dr_objects_records(csv_path)
-        # elif data_format == "diaobjects":
-        #     TabularDatService.create_dr_diaobject_records(csv_path)
-        # elif data_format == "forcedsources":
-        #     TabularDatService.create_dr_forcedsource_records(csv_path)
-        # else:
-        #     logger.log_text("data_format != object!!!")
-        # manifest_url = transfer_tabular_manifest(urls, CLOUD_STORAGE_CIT_SCI_PUBLIC, guid)
-        # updated_meta_records = update_meta_records_with_user_values(meta_records)
         tabular_meta_records = MetadataService.create_tabular_meta_records(tabular_records)
         meta_records_with_id = MetadataService.insert_meta_records(tabular_meta_records)
         LookupService.insert_lookup_records(meta_records_with_id, validator.project_id, validator.batch_id)
@@ -145,13 +135,13 @@ def download_image_data_and_process():
     response.messages = []
     validator = CitizenScienceValidator()
     urls = []
+    contains_flipbook = False
 
     if request.args.get("flipbook") is not None:
-        if request.args.get('flipbook') == "True":
-            contains_flipbook = True
-        else:
+        if request.args.get("flipbook").lower() == "false":
             contains_flipbook = False
-    logger.log_text("flipbook after bool assignment:" + str(contains_flipbook))
+        elif request.args.get("flipbook").lower() == "true":
+            contains_flipbook = True
 
     time_mark(debug, __name__)
 
@@ -164,6 +154,7 @@ def download_image_data_and_process():
         if validator.error is False:
             urls = upload_cutouts(cutouts)
             meta_records = MetadataService.create_meta_records(urls)
+
 
             if validator.error is False:              
                 manifest_url = build_and_upload_manifest(urls, CLOUD_STORAGE_CIT_SCI_PUBLIC, guid, contains_flipbook)
@@ -242,7 +233,6 @@ def insert_lookup_records(meta_records_with_id, project_id, batch_id):
 
 def insert_audit_records(vendor_project_id):
     global validator, response
-    vendor_project_id = request.args.get("vendor_project_id")
     try:
         audit_records, messages = AuditReportService.insert_audit_records(vendor_project_id, validator.mapped_manifest, validator.owner_id)
     except Exception as e:
@@ -319,6 +309,7 @@ def validate_project_metadata(email, vendor_project_id, vendor_batch_id = None):
         if ownerId == None:
             newOwner = True
             ownerId = create_new_owner_record(email)
+            validator.owner_id = ownerId
     else:
         return
         
@@ -434,6 +425,7 @@ def create_new_owner_record(email):
         response.messages.append(messages)
 
     owner_enum = validator.RecordType.CITIZEN_SCIENCE_OWNERS
+    validator.owner_id = owner_id
     validator.appendRollback(owner_enum, owner_id)
     return owner_id
 
@@ -446,7 +438,6 @@ def lookup_owner_record(email):
         response.status = "error"
         response.messages.append(messages)
     validator.owner_id = owner_id
-    logger.log_text(f"Logging validator.owner_id : {validator.owner_id}")
     return owner_id
 
 def locate(pattern, root_path):

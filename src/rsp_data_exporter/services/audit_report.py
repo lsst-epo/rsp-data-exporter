@@ -66,16 +66,16 @@ def insert_audit_records(vendor_project_id, mapped_manifest, owner_id):
             db.rollback()
             logger.log_text("an exception occurred in insert_audit_records!")
             logger.log_text(e.__str__())
-    
+        finally:
+            db.commit()
+            db.close()
     audit_messages = []
-    db.commit()
-    db.close()
+    
     try:
         audit_messages = audit_object_ids(object_ids, vendor_project_id)
     except Exception as e:
         logger.log_text("an error occurred while trying to lookup object IDs!")
         logger.log_text(e.__str__())
-        pass
 
     return audit_records, audit_messages
 
