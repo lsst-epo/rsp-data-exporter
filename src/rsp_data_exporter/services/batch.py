@@ -91,15 +91,16 @@ def check_batch_status(project_id, vendor_project_id, test_only, data_rights_app
             for batch_in_db in batches_in_db:
                 update_batch_record = False
 
-                if len(subject_set_list) == 0:
-                    update_batch_record = True
+                if len(subject_set_list) == 0: # There are no incomplete subject sets
+                    update_batch_record = True # Update the batch record to reflect that there's no way it can be incomplete
                 else:
+
+                    # Commenting the below out because limiting a pre-approved project to one subject set is no longer policy   
                     # Evaluate data rights
-                    if data_rights_approved == False:
-                        messages.append("Your project has not yet been approved by the data rights panel. You can curate no more than one subject set before your project is approved. If you have an existing subject set that you have already sent to your Zooniverse project and you need to correct the data before you present your project to the data rights panel then delete the subject set on the Zooniverse platform and try again.")
-                        db.close()
-                        return
-                    
+                    # if data_rights_approved == False:
+                    #     messages.append("Your project has not yet been approved by the data rights panel. You can curate no more than one subject set before your project is approved. If you have an existing subject set that you have already sent to your Zooniverse project and you need to correct the data before you present your project to the data rights panel then delete the subject set on the Zooniverse platform and try again.")
+                        # db.close()
+                        # return
                     
                     for sub in subject_set_list:
                         try:
