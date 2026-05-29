@@ -137,12 +137,10 @@ def build_and_upload_manifest_for_flipbook(urls, bucket, batch_id, guid):
         column_names = next(csv_rows)[1]
         column_names.append("external_id")
         upload_manifest.append(column_names)
-        location_cols = filter(lambda col: ("location:" in col), column_names)
+        location_cols =  [col for col in column_names if "location:" in col]
 
         for idx, row in csv_rows:
-            
-            updated_csv_row = row
-            
+                        
             for idx_l, loc in enumerate(location_cols):
                 filename_idx = column_names.index(loc)
                 filename = row[filename_idx].split("/").pop()
@@ -173,6 +171,7 @@ def build_and_upload_manifest_for_flipbook(urls, bucket, batch_id, guid):
                 mapped_manifest[filename]["user_defined_values"] = user_defined_values
 
                 # Now sort out the manifest to-be uploaded
+                updated_csv_row = row
                 updated_csv_row[filename_idx] = url
             updated_csv_row.append(edc_ver_id)
             upload_manifest.append(updated_csv_row)
