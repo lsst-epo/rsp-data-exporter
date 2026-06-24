@@ -107,7 +107,7 @@ def download_tabular_data_and_process():
     validate_project_metadata(email, vendor_project_id, vendor_batch_id) 
 
     if validator.error is False:
-        tabular_records = download_zip(CLOUD_STORAGE_BUCKET_HIPS2FITS , "manifest.csv", guid, validator.data_rights_approved, True)
+        tabular_records = download_zip(CLOUD_STORAGE_BUCKET_HIPS2FITS , "manifest.csv", guid, validator.data_rights_approved, validator.excess_data_exception, True)
         manifest_url = ManifestFileService.upload_manifest(f"/tmp/{guid}/manifest.csv")
         tabular_meta_records = MetadataService.create_tabular_meta_records(tabular_records)
         meta_records_with_id = MetadataService.insert_meta_records(tabular_meta_records)
@@ -149,7 +149,7 @@ def download_image_data_and_process():
     
     if validator.error is False:
         # astro cutouts data
-        cutouts = download_zip(CLOUD_STORAGE_BUCKET_HIPS2FITS, f"{guid}.zip", guid, validator.data_rights_approved)
+        cutouts = download_zip(CLOUD_STORAGE_BUCKET_HIPS2FITS, f"{guid}.zip", guid, validator.data_rights_approved, validator.excess_data_exception)
 
         if validator.error is False:
             urls = upload_cutouts(cutouts)
@@ -267,10 +267,10 @@ def upload_cutouts(cutouts):
     time_mark(debug, "End of upload...")
     return urls
 
-def download_zip(bucket_name, filename, guid, data_rights_approved, is_tabular_dataset = False):
+def download_zip(bucket_name, filename, guid, data_rights_approved, excess_data_exception, is_tabular_dataset = False):
     global validator
     time_mark(debug, "Start of download zip")
-    cutouts, messages = FileService.download_zip(bucket_name, filename, guid, data_rights_approved, is_tabular_dataset)
+    cutouts, messages = FileService.download_zip(bucket_name, filename, guid, data_rights_approved, excess_data_exception, is_tabular_dataset)
     time_mark(debug, "Grabbing cutouts finished...")
     if len(messages) > 0:
         response.messages.append(messages)
@@ -405,9 +405,11 @@ def create_new_project_record(owner_id, vendor_project_id):
 def lookup_project_record(vendor_project_id):
     global response, validator, debug
     time_mark(debug, "Start of lookup project record")
-    project_id, data_rights_approved, messages =  ProjectService.lookup_project_record(vendor_project_id)
+    project_id, data_rights_approved, excess_data_exception, messages =  ProjectService.lookup_project_record(vendor_project_id)
 
     validator.data_rights_approved = data_rights_approved
+    validator.excess_data_exception = excess_data_exception
+
     if len(messages) > 0:
         validator.error = True
         response.status = "error"

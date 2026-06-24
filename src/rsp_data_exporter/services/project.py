@@ -35,6 +35,7 @@ def lookup_project_record(vendor_project_id):
     status = None
     messages = []
     data_rights_approved = False
+    excess_data_exception = False
 
     try:
         db = DatabaseService.get_db_connection()
@@ -44,6 +45,7 @@ def lookup_project_record(vendor_project_id):
             logger.log_text("in a result in the loop!")
             status = row.project_status
             data_rights_approved = row.data_rights_approved
+            excess_data_exception = row.excess_data_exception
 
             if status in CLOSED_PROJECT_STATUSES:
                 messages.append(f"This project is in a status of {status} - either create a new project or contact Rubin to request for the project to be reopened.")
@@ -55,7 +57,7 @@ def lookup_project_record(vendor_project_id):
         messages.append("An error occurred while attempting to lookup your project record - this is usually due to an internal issue that we have been alerted to. Apologies about the downtime - please try again later.")
         logger.log_text(e.__str__())
 
-    return project_id, data_rights_approved, messages
+    return project_id, data_rights_approved, excess_data_exception, messages
 
 def create_new_project_record(owner_id, vendor_project_id):
     project_id = None

@@ -4,7 +4,7 @@ from enum import Enum
 class CitizenScienceValidator():
     error = False
     data_rights_approved = False
-    excess_data_approved = False
+    excess_data_exception = False
     active_batch = False
     project_id = None # EDC project ID
     batch_id = None # EDC batch ID
@@ -16,10 +16,10 @@ class CitizenScienceValidator():
     _rollbacks = []
     RecordType = Enum('RecordType', ['CITIZEN_SCIENCE_AUDIT', 'CITIZEN_SCIENCE_BATCHES', 'CITIZEN_SCIENCE_META', "CITIZEN_SCIENCE_OWNERS", "CITIZEN_SCIENCE_PROJ_META_LOOKUP", "CITIZEN_SCIENCE_PROJECTS"])
 
-    def __init__(self, error = False, data_rights_approved = False, excess_data_approved = False, active_batch = False):
+    def __init__(self, error = False, data_rights_approved = False, excess_data_exception = False, active_batch = False):
         self.error = error
         self.data_rights_approved = data_rights_approved
-        self.excess_data_approved = excess_data_approved
+        self.excess_data_exception = excess_data_exception
         self.active_batch = active_batch
 
     def appendRollback(self, recordType: Enum, primaryKey: int):
