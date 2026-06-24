@@ -9,7 +9,7 @@ logger = logging_client.logger(log_name)
 
 CLOUD_STORAGE_CIT_SCI_PUBLIC = os.environ["CLOUD_STORAGE_CIT_SCI_PUBLIC"]
 
-def download_zip(bucket_name, filename, guid, data_rights_approved, is_tabular_dataset = False):
+def download_zip(bucket_name, filename, guid, data_rights_approved, excess_data_exception, is_tabular_dataset = False):
     # First, clear out the /tmp folder so the app container doesn't run out of memory
     for root, dirs, files in os.walk('/tmp'):
         for f in files:
@@ -60,17 +60,22 @@ def download_zip(bucket_name, filename, guid, data_rights_approved, is_tabular_d
         # Count the number of objects and remove any files more than the allotted amount based on
         # the RSP user's data rights approval status
         files = os.listdir(unzipped_cutouts_dir)
-
-        max_objects_count = 100
-        if data_rights_approved == True:
-            max_objects_count = 10000
-        else:
-            messages.append("Your project has not been approved by the data rights panel as of yet, as such you will not be able to send any additional data to Zooniverse until your project is approved.")
-
-        if len(files) > max_objects_count:
-            messages.append(f"Currently, a maximum of {str(max_objects_count)} objects is allowed per batch for your project - your batch of size {str(len(files))} has been has been truncated and anything in excess of {str(max_objects_count)} objects has been removed.")
-            for f_file in files[(max_objects_count + 1):]:
-                os.remove(f"{unzipped_cutouts_dir}/{f_file}")
+        
+        # If the user has not been approved to bypass the max_object_count restrictions
+        # truncate their object set if necessary
+        if excess_data_exception == False:
+            max_objects_count = 100
+            if data_rights_approved == True:
+                max_objects_count = 100000
+            else:
+                messages.append("Your project has not been approved by the data rights panel as of yet, as such you will not be able to send any additional data to Zooniverse until your project is approved.")
+    
+            if len(files) > max_objects_count:
+                messages.append(f"Currently, a maximum of {str(max_objects_count)} objects is allowed per batch for your project - your batch of size {str(len(files))} has been has been truncated and anything in excess of {str(max_objects_count)} objects has been removed.")
+                for f_file in files[(max_objects_count):]:
+                    # Never omit the manifest file
+                    if f_file != 'manifest.csv':
+                        os.remove(f"{unzipped_cutouts_dir}/{f_file}")
 
         # Now, limit the files sent to image files
         pngs = glob.glob(f"/tmp/{guid}/*.png")
