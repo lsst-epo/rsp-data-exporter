@@ -1,4 +1,4 @@
-import os, csv, time
+import os, csv, time, posixpath
 from google.cloud import logging
 from google.cloud import storage
 from sqlalchemy import select, update
@@ -147,7 +147,7 @@ def build_and_upload_manifest_for_flipbook(urls, bucket, batch_id, guid):
                 mapped_manifest[filename] = {}
                 location_suffix = loc.removeprefix('location:image_')
 
-                url_idx = [n for n, x in enumerate(urls) if filename in x]
+                url_idx = [n for n, x in enumerate(urls) if posixpath.basename(x) == filename or posixpath.splitext(posixpath.basename(x))[0] == filename]
                 url = urls[url_idx[0]]
                 mapped_manifest[filename].update(dict(zip(column_names, row)))
                 mapped_manifest[filename][f"location:image_{str(idx_l)}"] = url
@@ -220,7 +220,7 @@ def build_and_upload_manifest_for_static_cutouts(urls, bucket, batch_id, guid):
         for idx, row in csv_rows:
             # Set new key for row
             filename = row[filename_idx]
-            url_idx = [n for n, x in enumerate(urls) if filename in x]
+            url_idx = [n for n, x in enumerate(urls) if posixpath.basename(x) == filename or posixpath.splitext(posixpath.basename(x))[0] == filename]
             url = urls[url_idx[0]]
             
             mf_dict = dict(zip(column_names, row))
